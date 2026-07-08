@@ -15,6 +15,8 @@ const topicSchema = new mongoose.Schema(
 
 const problemSchema = new mongoose.Schema(
   {
+    problemKey: { type: String, index: true, sparse: true },
+    isSeeded: { type: Boolean, default: false, index: true },
     title: { type: String, required: true },
     topic: { type: mongoose.Schema.Types.ObjectId, ref: "Topic", required: true },
     platformName: { type: String, required: true },

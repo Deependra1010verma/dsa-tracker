@@ -278,6 +278,13 @@ export default function App() {
 
   const sortedFilteredProblems = useMemo(() => {
     return [...filteredProblems].sort((left, right) => {
+      if (selectedTopic === "all") {
+        const topicOrderDelta = left.topic.order - right.topic.order;
+        if (topicOrderDelta !== 0) {
+          return topicOrderDelta;
+        }
+      }
+
       const sectionOrderDelta = (left.roadmapSectionOrder ?? 999) - (right.roadmapSectionOrder ?? 999);
       if (sectionOrderDelta !== 0) {
         return sectionOrderDelta;
@@ -295,27 +302,44 @@ export default function App() {
 
       return left.title.localeCompare(right.title);
     });
-  }, [filteredProblems]);
+  }, [filteredProblems, selectedTopic]);
 
   const groupedFilteredProblems = useMemo(() => {
-    const groups: Array<{ name: string; problems: Array<{ problem: Problem; displayIndex: number }> }> = [];
+    const groups: Array<{
+      key: string;
+      name: string;
+      order: number;
+      problems: Array<{ problem: Problem; displayIndex: number }>;
+    }> = [];
+    const groupsByKey = new Map<string, (typeof groups)[number]>();
     let displayIndex = 1;
 
     for (const problem of sortedFilteredProblems) {
       const sectionName = problem.roadmapSection?.trim() || "General";
-      const lastGroup = groups[groups.length - 1];
-      if (!lastGroup || lastGroup.name !== sectionName) {
-        groups.push({ name: sectionName, problems: [{ problem, displayIndex }] });
-        displayIndex += 1;
-        continue;
-      }
+      const sectionOrder = problem.roadmapSectionOrder ?? 999;
+      const sectionKey =
+        selectedTopic === "all"
+          ? `${problem.topic._id}:${sectionOrder}:${sectionName}`
+          : `${sectionOrder}:${sectionName}`;
+      const existingGroup = groupsByKey.get(sectionKey);
 
-      lastGroup.problems.push({ problem, displayIndex });
+      if (existingGroup) {
+        existingGroup.problems.push({ problem, displayIndex });
+      } else {
+        const group = {
+          key: sectionKey,
+          name: sectionName,
+          order: sectionOrder,
+          problems: [{ problem, displayIndex }],
+        };
+        groups.push(group);
+        groupsByKey.set(sectionKey, group);
+      }
       displayIndex += 1;
     }
 
     return groups;
-  }, [sortedFilteredProblems]);
+  }, [selectedTopic, sortedFilteredProblems]);
 
   function openAddDrawer(topicId?: string) {
     setActiveProblem(null);
@@ -667,7 +691,7 @@ export default function App() {
           ) : (
             <div className="problem-table">
               {groupedFilteredProblems.map((group) => (
-                <section key={group.name} className="problem-group">
+                <section key={group.key} className="problem-group">
                   {selectedTopicData && group.name !== "General" ? (
                     <div className="problem-group-heading">{group.name}</div>
                   ) : null}

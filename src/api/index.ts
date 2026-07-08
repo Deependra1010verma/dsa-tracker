@@ -24,6 +24,40 @@ function normalizeSearch(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function slugifySegment(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function problemKeyForSeed(topicSlug: string, title: string) {
+  return `${slugifySegment(topicSlug)}:${slugifySegment(title)}`;
+}
+
+function seededProblemScore(problem: {
+  status?: string;
+  shortNote?: string;
+  longNote?: string;
+  revisionCount?: number;
+  tags?: string[];
+  solvedAt?: Date | null;
+  revisitAt?: Date | null;
+  updatedAt?: Date | null;
+}) {
+  return [
+    problem.status && problem.status !== "unsolved" ? 10 : 0,
+    problem.shortNote ? 3 : 0,
+    problem.longNote ? 4 : 0,
+    (problem.tags?.length ?? 0) > 0 ? 2 : 0,
+    Math.min(problem.revisionCount ?? 0, 10),
+    problem.solvedAt ? 3 : 0,
+    problem.revisitAt ? 2 : 0,
+    problem.updatedAt ? problem.updatedAt.getTime() / 1_000_000_000_000 : 0,
+  ].reduce((sum, value) => sum + value, 0);
+}
+
 async function ensureSeedTopics() {
   const operations = topicSeeds.map((seed) => ({
     updateOne: {
@@ -52,8 +86,9 @@ async function ensureSeedTopics() {
 async function ensureSeedProblems() {
   const topics = await Topic.find({ slug: { $in: problemSeeds.map((seed) => seed.topicSlug) } });
   const topicsBySlug = new Map(topics.map((topic) => [topic.slug, topic._id]));
+  const topicIds = topics.map((topic) => topic._id);
 
-  const operations = problemSeeds
+  const seededDefinitions = problemSeeds
     .map((seed) => {
       const topicId = topicsBySlug.get(seed.topicSlug);
       if (!topicId) {
@@ -61,42 +96,124 @@ async function ensureSeedProblems() {
       }
 
       return {
-        updateOne: {
-          filter: { title: seed.title, topic: topicId },
-          update: {
-            $set: {
-              platformName: seed.platformName,
-              platformUrl: seed.platformUrl,
-              roadmapSection: seed.roadmapSection ?? "",
-              roadmapSectionOrder: seed.roadmapSectionOrder ?? 999,
-              roadmapOrder: seed.roadmapOrder ?? 999,
-              difficulty: seed.difficulty,
-              pattern: seed.pattern ?? "",
-              rating: seed.rating ?? 0,
-            },
-            $setOnInsert: {
-              title: seed.title,
-              topic: topicId,
-              status: seed.status,
-              shortNote: seed.shortNote,
-              longNote: seed.longNote,
-              tags: seed.tags,
-              priority: seed.priority,
-              isPinned: seed.isPinned,
-              revisionCount: seed.revisionCount ?? 0,
-              solvedAt: seed.status === "solved" ? new Date() : undefined,
-              revisitAt: seed.status === "revisit" ? new Date() : undefined,
-            },
-          },
-          upsert: true,
-        },
+        ...seed,
+        topicId,
+        problemKey: problemKeyForSeed(seed.topicSlug, seed.title),
       };
     })
-    .filter((operation): operation is NonNullable<typeof operation> => Boolean(operation));
+    .filter((seed): seed is NonNullable<typeof seed> => Boolean(seed));
+
+  const seededKeys = seededDefinitions.map((seed) => seed.problemKey);
+  const seededTitles = seededDefinitions.map((seed) => seed.title);
+
+  const existingSeededProblems = await Problem.find({
+    $or: [
+      { problemKey: { $in: seededKeys } },
+      {
+        topic: { $in: topicIds },
+        title: { $in: seededTitles },
+      },
+    ],
+  }).sort({ updatedAt: -1, createdAt: -1 });
+
+  const existingByKey = new Map<string, typeof existingSeededProblems>();
+  for (const problem of existingSeededProblems) {
+    const topic = topics.find((entry) => entry._id.equals(problem.topic));
+    if (!topic) {
+      continue;
+    }
+
+    const key = problem.problemKey || problemKeyForSeed(topic.slug, problem.title);
+    const bucket = existingByKey.get(key) ?? [];
+    bucket.push(problem);
+    existingByKey.set(key, bucket);
+  }
+
+  const dedupeWrites = [];
+  const duplicateIdsToDelete: string[] = [];
+
+  for (const seed of seededDefinitions) {
+    const matches = existingByKey.get(seed.problemKey) ?? [];
+    if (matches.length === 0) {
+      continue;
+    }
+
+    const keeper = [...matches].sort((left, right) => seededProblemScore(right) - seededProblemScore(left))[0];
+    duplicateIdsToDelete.push(
+      ...matches.filter((problem) => String(problem._id) !== String(keeper._id)).map((problem) => String(problem._id))
+    );
+
+    dedupeWrites.push({
+      updateOne: {
+        filter: { _id: keeper._id },
+        update: {
+          $set: {
+            problemKey: seed.problemKey,
+            isSeeded: true,
+            roadmapSection: seed.roadmapSection ?? "",
+            roadmapSectionOrder: seed.roadmapSectionOrder ?? 999,
+            roadmapOrder: seed.roadmapOrder ?? 999,
+            platformName: seed.platformName,
+            platformUrl: seed.platformUrl,
+            difficulty: seed.difficulty,
+            pattern: seed.pattern ?? "",
+            rating: seed.rating ?? 0,
+          },
+        },
+      },
+    });
+  }
+
+  if (dedupeWrites.length > 0) {
+    await Problem.bulkWrite(dedupeWrites);
+  }
+
+  if (duplicateIdsToDelete.length > 0) {
+    await Problem.deleteMany({ _id: { $in: duplicateIdsToDelete } });
+  }
+
+  const operations = seededDefinitions.map((seed) => ({
+    updateOne: {
+      filter: { problemKey: seed.problemKey },
+      update: {
+        $set: {
+          problemKey: seed.problemKey,
+          isSeeded: true,
+          platformName: seed.platformName,
+          platformUrl: seed.platformUrl,
+          roadmapSection: seed.roadmapSection ?? "",
+          roadmapSectionOrder: seed.roadmapSectionOrder ?? 999,
+          roadmapOrder: seed.roadmapOrder ?? 999,
+          difficulty: seed.difficulty,
+          pattern: seed.pattern ?? "",
+          rating: seed.rating ?? 0,
+        },
+        $setOnInsert: {
+          title: seed.title,
+          topic: seed.topicId,
+          status: seed.status,
+          shortNote: seed.shortNote,
+          longNote: seed.longNote,
+          tags: seed.tags,
+          priority: seed.priority,
+          isPinned: seed.isPinned,
+          revisionCount: seed.revisionCount ?? 0,
+          solvedAt: seed.status === "solved" ? new Date() : undefined,
+          revisitAt: seed.status === "revisit" ? new Date() : undefined,
+        },
+      },
+      upsert: true,
+    },
+  }));
 
   if (operations.length > 0) {
     await Problem.bulkWrite(operations);
   }
+
+  await Problem.deleteMany({
+    isSeeded: true,
+    problemKey: { $nin: seededKeys },
+  });
 }
 
 function statusFromValue(value: unknown): ProblemStatus | "" {
