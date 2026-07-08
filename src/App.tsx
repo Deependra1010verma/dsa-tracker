@@ -120,7 +120,7 @@ export default function App() {
     return window.localStorage.getItem(AUTH_STORAGE_KEY) === "true";
   });
   const [loginForm, setLoginForm] = useState({
-    username: DEFAULT_LOGIN.username,
+    username: "",
     password: "",
   });
   const [loginError, setLoginError] = useState("");
@@ -143,9 +143,11 @@ export default function App() {
     [selectedTopic, topics]
   );
 
-  async function loadData() {
+  async function loadData(options?: { silent?: boolean }) {
     try {
-      setLoading(true);
+      if (!options?.silent) {
+        setLoading(true);
+      }
       setError("");
       const [topicsRes, problemsRes, statsRes] = await Promise.all([
         api<{ topics: Topic[] }>("/api/topics"),
@@ -167,7 +169,9 @@ export default function App() {
       return;
     }
 
-    void loadData();
+    void loadData({
+      silent: topics.length > 0 || problems.length > 0 || stats !== null,
+    });
   }, [isAuthenticated]);
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -196,10 +200,6 @@ export default function App() {
     setIsAuthenticated(false);
     setLoginError("");
     setError("");
-    setLoading(true);
-    setTopics([]);
-    setProblems([]);
-    setStats(null);
     setSearch("");
     setStatusFilter("all");
     setDifficultyFilter("all");
@@ -207,84 +207,6 @@ export default function App() {
     setDrawerOpen(false);
     setActiveProblem(null);
     setForm(emptyForm);
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <main className="auth-shell">
-        <section className="auth-hero">
-          <div className="brand auth-brand">
-            <div className="brand-mark">DSA</div>
-            <div>
-              <h1>Tracker</h1>
-              <p>Private DSA practice board with a simple login gate.</p>
-            </div>
-          </div>
-
-          <div className="auth-copy">
-            <p className="eyebrow">Welcome back</p>
-            <h2>Log in to open your tracker.</h2>
-            <p className="hero-copy">
-              Use the default credentials below to enter the app. Once inside, you can manage
-              topics, problem records, notes, and revision flow.
-            </p>
-
-            {loginConfigured ? (
-              <div className="credential-card">
-                <span>Default username</span>
-                <strong>{DEFAULT_LOGIN.username}</strong>
-                <span>Default password</span>
-                <strong>{DEFAULT_LOGIN.password}</strong>
-              </div>
-            ) : (
-              <div className="banner error">
-                Set <code>USERNAME</code> and <code>PASSWORD</code> in your{" "}
-                <code>.env</code> file to enable sign in.
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="auth-card">
-          <p className="panel-label">Secure access</p>
-          <h3>Sign in</h3>
-          <p className="auth-note">This is a lightweight local login for the personal tracker.</p>
-
-          <form className="auth-form" onSubmit={handleLogin}>
-            <label>
-              Username
-              <input
-                value={loginForm.username}
-                onChange={(event) =>
-                  setLoginForm({ ...loginForm, username: event.target.value })
-                }
-                autoComplete="username"
-                placeholder="name@example.com"
-              />
-            </label>
-
-            <label>
-              Password
-              <input
-                type="password"
-                value={loginForm.password}
-                onChange={(event) =>
-                  setLoginForm({ ...loginForm, password: event.target.value })
-                }
-                autoComplete="current-password"
-                placeholder="Password"
-              />
-            </label>
-
-            {loginError ? <div className="banner error">{loginError}</div> : null}
-
-            <button className="primary-btn auth-submit" type="submit">
-              Enter Tracker
-            </button>
-          </form>
-        </section>
-      </main>
-    );
   }
 
   const filteredProblems = useMemo(() => {
@@ -409,7 +331,71 @@ export default function App() {
 
   const progress = stats && stats.totalProblems > 0 ? Math.round((stats.solvedProblems / stats.totalProblems) * 100) : 0;
 
-  return (
+  const authView = (
+    <main className="auth-shell">
+      <section className="auth-hero">
+        <div className="brand auth-brand">
+          <div className="brand-mark">DSA</div>
+          <div>
+            <h1>Tracker</h1>
+            <p>Private DSA practice board with a simple login gate.</p>
+          </div>
+        </div>
+
+        <div className="auth-copy">
+          <p className="eyebrow">Welcome back</p>
+          <h2>Log in to open your tracker.</h2>
+          <p className="hero-copy">
+            Use the credentials from your <code>.env</code> file to enter the app. Once inside,
+            you can manage topics, problem records, notes, and revision flow.
+          </p>
+          {!loginConfigured ? (
+            <div className="banner error">
+              Set <code>USERNAME</code> and <code>PASSWORD</code> in your{" "}
+              <code>.env</code> file to enable sign in.
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="auth-card">
+        <p className="panel-label">Secure access</p>
+        <h3>Sign in</h3>
+        <p className="auth-note">This is a lightweight local login for the personal tracker.</p>
+
+        <form className="auth-form" onSubmit={handleLogin}>
+          <label>
+            Username
+            <input
+              value={loginForm.username}
+              onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })}
+              autoComplete="username"
+              placeholder="name@example.com"
+            />
+          </label>
+
+          <label>
+            Password
+            <input
+              type="password"
+              value={loginForm.password}
+              onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+              autoComplete="current-password"
+              placeholder="Password"
+            />
+          </label>
+
+          {loginError ? <div className="banner error">{loginError}</div> : null}
+
+          <button className="primary-btn auth-submit" type="submit">
+            Enter Tracker
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+
+  const dashboardView = (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
@@ -802,6 +788,8 @@ export default function App() {
       ) : null}
     </div>
   );
+
+  return isAuthenticated ? dashboardView : authView;
 }
 
 function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {

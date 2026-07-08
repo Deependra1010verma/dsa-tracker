@@ -74,28 +74,6 @@ body {
   max-width: 9ch;
 }
 
-.credential-card {
-  margin-top: 18px;
-  display: grid;
-  gap: 6px;
-  padding: 18px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.credential-card span {
-  color: var(--muted);
-  font-size: 0.82rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
-.credential-card strong {
-  font-size: 1rem;
-  word-break: break-word;
-}
-
 .auth-card {
   padding: 28px;
 }
