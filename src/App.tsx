@@ -155,6 +155,8 @@ export default function App() {
   const [expandedProblems, setExpandedProblems] = useState<Set<string>>(() => new Set());
   const [form, setForm] = useState<ProblemFormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
 
   const selectedTopicData = useMemo(
     () => topics.find((topic) => topic._id === selectedTopic) ?? null,
@@ -533,7 +535,42 @@ export default function App() {
 
   const dashboardView = (
     <div className="app-shell">
-      <aside className="sidebar">
+      {/* Sticky Mobile Top Bar */}
+      <header className="mobile-header">
+        <button className="menu-btn" onClick={() => setMobileSidebarOpen(true)} aria-label="Open menu">
+          <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <span className="mobile-title">DSA Tracker</span>
+        <div className="mobile-header-actions">
+          <button className="icon-btn" onClick={() => void loadData()} title="Refresh">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 4v6h-6M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      {/* Sidebar Backdrop Overlay on Mobile */}
+      {mobileSidebarOpen ? (
+        <div className="sidebar-backdrop" onClick={() => setMobileSidebarOpen(false)} />
+      ) : null}
+
+      <aside className={`sidebar ${mobileSidebarOpen ? "open" : ""}`}>
+        <div className="sidebar-header-mobile">
+          <span className="sidebar-mobile-title">Topics</span>
+          <button className="close-btn" onClick={() => setMobileSidebarOpen(false)} aria-label="Close menu">
+            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
         <div className="brand">
           <div className="brand-mark">DSA</div>
           <div>
@@ -542,7 +579,13 @@ export default function App() {
           </div>
         </div>
 
-        <button className={`topic-card all-topics ${selectedTopic === "all" ? "active" : ""}`} onClick={() => setSelectedTopic("all")}>
+        <button
+          className={`topic-card all-topics ${selectedTopic === "all" ? "active" : ""}`}
+          onClick={() => {
+            setSelectedTopic("all");
+            setMobileSidebarOpen(false);
+          }}
+        >
           <div>
             <span className="topic-name">All Topics</span>
             <span className="topic-subtitle">{problems.length} records</span>
@@ -559,7 +602,10 @@ export default function App() {
               <button
                 key={topic._id}
                 className={`topic-card ${active ? "active" : ""}`}
-                onClick={() => setSelectedTopic(topic._id)}
+                onClick={() => {
+                  setSelectedTopic(topic._id);
+                  setMobileSidebarOpen(false);
+                }}
               >
                 <div className="topic-dot" style={{ background: topic.accent }} />
                 <div className="topic-copy">
@@ -593,7 +639,7 @@ export default function App() {
             >
               {editMode ? "Edit on" : "Edit off"}
             </button>
-            <button className="secondary-btn" onClick={loadData}>
+            <button className="secondary-btn" onClick={() => void loadData()}>
               Refresh
             </button>
             <button className="ghost-btn" onClick={handleLogout}>
@@ -601,6 +647,7 @@ export default function App() {
             </button>
           </div>
         </section>
+
 
         {error ? <div className="banner error">{error}</div> : null}
 
@@ -791,15 +838,19 @@ export default function App() {
                     >
                       {expandedProblems.has(problem._id) ? "Less" : "More"}
                     </button>
-                    <button
-                      className="link-btn danger"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void deleteProblem(problem._id);
-                      }}
-                    >
-                      Delete
-                    </button>
+                    {editMode ? (
+                      <button
+                        className="link-btn danger"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (window.confirm("Are you sure you want to delete this problem?")) {
+                            void deleteProblem(problem._id);
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    ) : null}
                   </div>
                 </article>
                   ))}
