@@ -25,16 +25,32 @@ function json(res: ServerResponse, statusCode: number, payload: unknown) {
 
 function readBody(req: IncomingMessage): Promise<unknown> {
   const reqWithBody = req as { body?: unknown };
-  if (reqWithBody.body !== undefined) {
-    if (typeof reqWithBody.body === "string") {
+  if (reqWithBody.body !== undefined && reqWithBody.body !== null) {
+    const b = reqWithBody.body;
+    if (typeof b === "object") {
+      if (Buffer.isBuffer(b)) {
+        try {
+          return Promise.resolve(JSON.parse(b.toString("utf8")));
+        } catch {
+          return Promise.resolve({});
+        }
+      }
+      return Promise.resolve(b);
+    }
+    if (typeof b === "string") {
       try {
-        return Promise.resolve(JSON.parse(reqWithBody.body));
+        return Promise.resolve(JSON.parse(b));
       } catch {
         return Promise.resolve({});
       }
     }
-    return Promise.resolve(reqWithBody.body);
+    return Promise.resolve(b);
   }
+
+  if (!req.readable || req.complete) {
+    return Promise.resolve({});
+  }
+
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
@@ -55,25 +71,71 @@ function readBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-async function ensureSeedTopics() {
-  const topicCount = await Topic.countDocuments();
-  if (topicCount > 0) {
-    return;
-  }
+function slugifySegment(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
-  await Topic.insertMany(topicSeeds);
+function problemKeyForSeed(topicSlug: string, title: string) {
+  return `${slugifySegment(topicSlug)}:${slugifySegment(title)}`;
+}
+
+function seededProblemScore(problem: {
+  status?: string;
+  shortNote?: string;
+  longNote?: string;
+  revisionCount?: number;
+  tags?: string[];
+  solvedAt?: Date | null;
+  revisitAt?: Date | null;
+  updatedAt?: Date | null;
+}) {
+  return [
+    problem.status && problem.status !== "unsolved" ? 10 : 0,
+    problem.shortNote ? 3 : 0,
+    problem.longNote ? 4 : 0,
+    (problem.tags?.length ?? 0) > 0 ? 2 : 0,
+    Math.min(problem.revisionCount ?? 0, 10),
+    problem.solvedAt ? 3 : 0,
+    problem.revisitAt ? 2 : 0,
+    problem.updatedAt ? problem.updatedAt.getTime() / 1_000_000_000_000 : 0,
+  ].reduce((sum, value) => sum + value, 0);
+}
+
+async function ensureSeedTopics() {
+  const operations = topicSeeds.map((seed) => ({
+    updateOne: {
+      filter: { slug: seed.slug },
+      update: {
+        $set: {
+          name: seed.name,
+          order: seed.order,
+          targetCount: seed.targetCount,
+          description: seed.description,
+          accent: seed.accent,
+        },
+        $setOnInsert: {
+          slug: seed.slug,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  if (operations.length > 0) {
+    await Topic.bulkWrite(operations);
+  }
 }
 
 async function ensureSeedProblems() {
-  const problemCount = await Problem.countDocuments();
-  if (problemCount > 0) {
-    return;
-  }
-
   const topics = await Topic.find({ slug: { $in: problemSeeds.map((seed) => seed.topicSlug) } });
   const topicsBySlug = new Map(topics.map((topic) => [topic.slug, topic._id]));
+  const topicIds = topics.map((topic) => topic._id);
 
-  const demoProblems = problemSeeds
+  const seededDefinitions = problemSeeds
     .map((seed) => {
       const topicId = topicsBySlug.get(seed.topicSlug);
       if (!topicId) {
@@ -81,27 +143,124 @@ async function ensureSeedProblems() {
       }
 
       return {
-        title: seed.title,
-        topic: topicId,
-        platformName: seed.platformName,
-        platformUrl: seed.platformUrl,
-        difficulty: seed.difficulty,
-        status: seed.status,
-        shortNote: seed.shortNote,
-        longNote: seed.longNote,
-        tags: seed.tags,
-        priority: seed.priority,
-        isPinned: seed.isPinned,
-        revisionCount: seed.revisionCount ?? 0,
-        solvedAt: seed.status === "solved" ? new Date() : undefined,
-        revisitAt: seed.status === "revisit" ? new Date() : undefined,
+        ...seed,
+        topicId,
+        problemKey: problemKeyForSeed(seed.topicSlug, seed.title),
       };
     })
-    .filter((problem): problem is NonNullable<typeof problem> => Boolean(problem));
+    .filter((seed): seed is NonNullable<typeof seed> => Boolean(seed));
 
-  if (demoProblems.length > 0) {
-    await Problem.insertMany(demoProblems);
+  const seededKeys = seededDefinitions.map((seed) => seed.problemKey);
+  const seededTitles = seededDefinitions.map((seed) => seed.title);
+
+  const existingSeededProblems = await Problem.find({
+    $or: [
+      { problemKey: { $in: seededKeys } },
+      {
+        topic: { $in: topicIds },
+        title: { $in: seededTitles },
+      },
+    ],
+  }).sort({ updatedAt: -1, createdAt: -1 });
+
+  const existingByKey = new Map<string, typeof existingSeededProblems>();
+  for (const problem of existingSeededProblems) {
+    const topic = topics.find((entry) => entry._id.equals(problem.topic));
+    if (!topic) {
+      continue;
+    }
+
+    const key = problem.problemKey || problemKeyForSeed(topic.slug, problem.title);
+    const bucket = existingByKey.get(key) ?? [];
+    bucket.push(problem);
+    existingByKey.set(key, bucket);
   }
+
+  const dedupeWrites = [];
+  const duplicateIdsToDelete: string[] = [];
+
+  for (const seed of seededDefinitions) {
+    const matches = existingByKey.get(seed.problemKey) ?? [];
+    if (matches.length === 0) {
+      continue;
+    }
+
+    const keeper = [...matches].sort((left, right) => seededProblemScore(right) - seededProblemScore(left))[0];
+    duplicateIdsToDelete.push(
+      ...matches.filter((problem) => String(problem._id) !== String(keeper._id)).map((problem) => String(problem._id))
+    );
+
+    dedupeWrites.push({
+      updateOne: {
+        filter: { _id: keeper._id },
+        update: {
+          $set: {
+            problemKey: seed.problemKey,
+            isSeeded: true,
+            roadmapSection: seed.roadmapSection ?? "",
+            roadmapSectionOrder: seed.roadmapSectionOrder ?? 999,
+            roadmapOrder: seed.roadmapOrder ?? 999,
+            platformName: seed.platformName,
+            platformUrl: seed.platformUrl,
+            difficulty: seed.difficulty,
+            pattern: seed.pattern ?? "",
+            rating: seed.rating ?? 0,
+          },
+        },
+      },
+    });
+  }
+
+  if (dedupeWrites.length > 0) {
+    await Problem.bulkWrite(dedupeWrites);
+  }
+
+  if (duplicateIdsToDelete.length > 0) {
+    await Problem.deleteMany({ _id: { $in: duplicateIdsToDelete } });
+  }
+
+  const operations = seededDefinitions.map((seed) => ({
+    updateOne: {
+      filter: { problemKey: seed.problemKey },
+      update: {
+        $set: {
+          problemKey: seed.problemKey,
+          isSeeded: true,
+          platformName: seed.platformName,
+          platformUrl: seed.platformUrl,
+          roadmapSection: seed.roadmapSection ?? "",
+          roadmapSectionOrder: seed.roadmapSectionOrder ?? 999,
+          roadmapOrder: seed.roadmapOrder ?? 999,
+          difficulty: seed.difficulty,
+          pattern: seed.pattern ?? "",
+          rating: seed.rating ?? 0,
+        },
+        $setOnInsert: {
+          title: seed.title,
+          topic: seed.topicId,
+          status: seed.status,
+          shortNote: seed.shortNote,
+          longNote: seed.longNote,
+          tags: seed.tags,
+          priority: seed.priority,
+          isPinned: seed.isPinned,
+          revisionCount: seed.revisionCount ?? 0,
+          solvedAt: seed.status === "solved" ? new Date() : undefined,
+          revisitAt: seed.status === "revisit" ? new Date() : undefined,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  if (operations.length > 0) {
+    await Problem.bulkWrite(operations);
+  }
+
+  await Problem.deleteMany({
+    isSeeded: true,
+    problemKey: { $nin: seededKeys },
+  });
 }
 
 let seedPromise: Promise<void> | null = null;
@@ -197,6 +356,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
           { title: { $regex: search, $options: "i" } },
           { shortNote: { $regex: search, $options: "i" } },
           { longNote: { $regex: search, $options: "i" } },
+          { pattern: { $regex: search, $options: "i" } },
           { platformName: { $regex: search, $options: "i" } },
           { tags: { $regex: search, $options: "i" } },
         ];
@@ -204,7 +364,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
 
       const problems = await Problem.find(filter)
         .populate("topic")
-        .sort({ isPinned: -1, priority: -1, updatedAt: -1 });
+        .sort({ roadmapSectionOrder: 1, roadmapOrder: 1, isPinned: -1, priority: -1, updatedAt: -1 });
 
       json(res, 200, { problems });
       return;
@@ -237,10 +397,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const {
         title,
         topicId,
+        roadmapSection = "",
         platformName,
         platformUrl,
         difficulty,
         status,
+        pattern = "",
+        rating = 0,
         shortNote = "",
         longNote = "",
         tags = [],
@@ -251,10 +414,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       const created = await Problem.create({
         title,
         topic: topicId,
+        roadmapSection,
         platformName,
         platformUrl,
         difficulty,
         status,
+        pattern,
+        rating,
         shortNote,
         longNote,
         tags,
@@ -282,10 +448,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       Object.assign(problem, {
         title: next.title ?? problem.title,
         topic: next.topicId ?? problem.topic,
+        roadmapSection: next.roadmapSection ?? problem.roadmapSection,
         platformName: next.platformName ?? problem.platformName,
         platformUrl: next.platformUrl ?? problem.platformUrl,
         difficulty: next.difficulty ?? problem.difficulty,
         status: next.status ?? problem.status,
+        pattern: next.pattern ?? problem.pattern,
+        rating: typeof next.rating === "number" ? next.rating : problem.rating,
         shortNote: next.shortNote ?? problem.shortNote,
         longNote: next.longNote ?? problem.longNote,
         tags: Array.isArray(next.tags) ? next.tags : problem.tags,

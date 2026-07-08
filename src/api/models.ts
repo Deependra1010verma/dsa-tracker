@@ -50,6 +50,9 @@ const problemSchema = new mongoose.Schema(
 
 problemSchema.index({ title: "text", shortNote: "text", longNote: "text", platformName: "text" });
 
-export const Topic = mongoose.model("Topic", topicSchema);
-export const Problem = mongoose.model("Problem", problemSchema);
+const TopicModel = mongoose.model("Topic", topicSchema);
+export const Topic = (mongoose.models.Topic as typeof TopicModel) || TopicModel;
+
+const ProblemModel = mongoose.model("Problem", problemSchema);
+export const Problem = (mongoose.models.Problem as typeof ProblemModel) || ProblemModel;
 export { topicSeeds };
