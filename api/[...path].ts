@@ -280,7 +280,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
   await connectDb(mongoUri);
   await ensureSeedData();
 
-  const url = new URL(req.url ?? "/api", "http://localhost");
+  const host = req.headers.host || "localhost";
+  const protocol = req.headers["x-forwarded-proto"] || "http";
+  const baseUrl = `${protocol}://${host}`;
+  const url = new URL(req.url ?? "/api", baseUrl);
   const pathname = url.pathname;
   const method = (req.method ?? "GET").toUpperCase();
 
