@@ -12,29 +12,27 @@ Personal MERN tracker for DSA practice.
 
 ## Structure
 
-- `server` - Express + MongoDB API
-- `client` - React + Vite UI
+- `src/api` - Express + MongoDB API
+- `src` - React + Vite UI
 
 ## Run locally
 
-1. Create `server/.env`
+1. Create `.env`
 
 ```env
 MONGODB_URI=mongodb://127.0.0.1:27017/dsa-tracker
 PORT=4000
 ```
 
-2. Install dependencies in both apps
+2. Install dependencies
 
-3. Start the server and client
+3. Start the app
 
 ```bash
-npm run dev:server
-npm run dev:client
+npm run dev
 ```
 
 ## Notes
 
 - No login/auth is included.
 - This is designed for single-user personal use.
-
