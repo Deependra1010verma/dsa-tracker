@@ -1,4 +1,4 @@
-import type { TopicSeed } from "./types.js";
+import type { ProblemSeed, TopicSeed } from "./types.js";
 
 export const topicSeeds: TopicSeed[] = [
   {
@@ -163,3 +163,71 @@ export const topicSeeds: TopicSeed[] = [
   },
 ];
 
+export const problemSeeds: ProblemSeed[] = [
+  {
+    title: "Two Sum",
+    topicSlug: "arrays",
+    platformName: "LeetCode",
+    platformUrl: "https://leetcode.com/problems/two-sum/",
+    difficulty: "Easy",
+    status: "solved",
+    shortNote: "Use a hash map to store complements.",
+    longNote: "One pass hash map solution. Check complement before inserting current value.",
+    tags: ["hash map", "two pointers"],
+    priority: 9,
+    isPinned: true,
+  },
+  {
+    title: "Valid Parentheses",
+    topicSlug: "stack",
+    platformName: "LeetCode",
+    platformUrl: "https://leetcode.com/problems/valid-parentheses/",
+    difficulty: "Easy",
+    status: "solved",
+    shortNote: "Push opening brackets, pop on matching close.",
+    longNote: "Classic stack usage. Handle mismatch and odd-length strings early.",
+    tags: ["stack", "string"],
+    priority: 8,
+    isPinned: true,
+  },
+  {
+    title: "Longest Substring Without Repeating Characters",
+    topicSlug: "sliding-window",
+    platformName: "LeetCode",
+    platformUrl: "https://leetcode.com/problems/longest-substring-without-repeating-characters/",
+    difficulty: "Medium",
+    status: "revisit",
+    shortNote: "Track last seen index and shrink the window.",
+    longNote: "Sliding window with a map of character positions. Move left pointer past repeats.",
+    tags: ["sliding window", "hashing"],
+    priority: 10,
+    isPinned: false,
+    revisionCount: 1,
+  },
+  {
+    title: "Binary Tree Level Order Traversal",
+    topicSlug: "trees",
+    platformName: "LeetCode",
+    platformUrl: "https://leetcode.com/problems/binary-tree-level-order-traversal/",
+    difficulty: "Medium",
+    status: "unsolved",
+    shortNote: "Use a queue and process level by level.",
+    longNote: "Breadth-first traversal. Store nodes per level and append children in order.",
+    tags: ["tree", "bfs"],
+    priority: 7,
+    isPinned: false,
+  },
+  {
+    title: "Merge Intervals",
+    topicSlug: "greedy",
+    platformName: "LeetCode",
+    platformUrl: "https://leetcode.com/problems/merge-intervals/",
+    difficulty: "Medium",
+    status: "unsolved",
+    shortNote: "Sort by start and merge overlapping ranges.",
+    longNote: "After sorting, keep a running interval and extend or push to result.",
+    tags: ["intervals", "sorting"],
+    priority: 6,
+    isPinned: false,
+  },
+];

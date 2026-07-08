@@ -11,3 +11,17 @@ export type TopicSeed = {
   accent: string;
 };
 
+export type ProblemSeed = {
+  title: string;
+  topicSlug: string;
+  platformName: string;
+  platformUrl: string;
+  difficulty: Difficulty;
+  status: ProblemStatus;
+  shortNote: string;
+  longNote: string;
+  tags: string[];
+  priority: number;
+  isPinned: boolean;
+  revisionCount?: number;
+};

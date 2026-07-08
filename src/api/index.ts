@@ -4,6 +4,7 @@ import path from "path";
 import { existsSync } from "fs";
 import { connectDb } from "./db.js";
 import { Problem, Topic, topicSeeds } from "./models.js";
+import { problemSeeds } from "./seed.js";
 import type { ProblemStatus } from "./types.js";
 
 const app = express();
@@ -30,6 +31,46 @@ async function ensureSeedTopics() {
   }
 
   await Topic.insertMany(topicSeeds);
+}
+
+async function ensureSeedProblems() {
+  const problemCount = await Problem.countDocuments();
+  if (problemCount > 0) {
+    return;
+  }
+
+  const topics = await Topic.find({ slug: { $in: problemSeeds.map((seed) => seed.topicSlug) } });
+  const topicsBySlug = new Map(topics.map((topic) => [topic.slug, topic._id]));
+
+  const demoProblems = problemSeeds
+    .map((seed) => {
+      const topicId = topicsBySlug.get(seed.topicSlug);
+      if (!topicId) {
+        return null;
+      }
+
+      return {
+        title: seed.title,
+        topic: topicId,
+        platformName: seed.platformName,
+        platformUrl: seed.platformUrl,
+        difficulty: seed.difficulty,
+        status: seed.status,
+        shortNote: seed.shortNote,
+        longNote: seed.longNote,
+        tags: seed.tags,
+        priority: seed.priority,
+        isPinned: seed.isPinned,
+        revisionCount: seed.revisionCount ?? 0,
+        solvedAt: seed.status === "solved" ? new Date() : undefined,
+        revisitAt: seed.status === "revisit" ? new Date() : undefined,
+      };
+    })
+    .filter((problem): problem is NonNullable<typeof problem> => Boolean(problem));
+
+  if (demoProblems.length > 0) {
+    await Problem.insertMany(demoProblems);
+  }
 }
 
 function statusFromValue(value: unknown): ProblemStatus | "" {
@@ -261,6 +302,7 @@ app.use(
 
 await connectDb(mongoUri);
 await ensureSeedTopics();
+await ensureSeedProblems();
 
 app.listen(port, "127.0.0.1", () => {
   console.log(`DSA Tracker API running on http://127.0.0.1:${port}`);
