@@ -24,6 +24,17 @@ function json(res: ServerResponse, statusCode: number, payload: unknown) {
 }
 
 function readBody(req: IncomingMessage): Promise<unknown> {
+  const reqWithBody = req as { body?: unknown };
+  if (reqWithBody.body !== undefined) {
+    if (typeof reqWithBody.body === "string") {
+      try {
+        return Promise.resolve(JSON.parse(reqWithBody.body));
+      } catch {
+        return Promise.resolve({});
+      }
+    }
+    return Promise.resolve(reqWithBody.body);
+  }
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
