@@ -12,7 +12,8 @@ Personal MERN tracker for DSA practice.
 
 ## Structure
 
-- `src/api` - Express + MongoDB API
+- `src/api` - Shared MongoDB models, seeds, and API logic
+- `api/[...path].ts` - Vercel serverless API entrypoint
 - `src` - React + Vite UI
 
 ## Run locally
@@ -34,5 +35,18 @@ npm run dev
 
 ## Notes
 
-- No login/auth is included.
+- A simple local login gate is included for the dashboard.
 - This is designed for single-user personal use.
+
+## Deploying to Vercel
+
+Set these environment variables in your Vercel project:
+
+```env
+MONGODB_URI=your_mongodb_connection_string
+USERNAME=your_login_username
+PASSWORD=your_login_password
+```
+
+Build output is configured for `dist/web`, and `/api/*` routes are served by the
+serverless function in `api/[...path].ts`.
