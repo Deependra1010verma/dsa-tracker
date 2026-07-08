@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, Fragment, type FormEvent } from "react";
 
 type Difficulty = "Easy" | "Medium" | "Hard";
 type Status = "unsolved" | "solved" | "revisit" | "skipped";
@@ -99,6 +99,125 @@ function formatRating(rating?: number) {
   return typeof rating === "number" && rating > 0 ? `${rating}/10` : "";
 }
 
+function getProblemCategories(problem: Problem): string[] {
+  const cats: string[] = [];
+
+  if (problem.tags) {
+    for (const tag of problem.tags) {
+      const normalized = tag.trim().toLowerCase();
+      if (normalized === "must do" || normalized === "must-do" || normalized === "mustdo" || normalized === "⭐") {
+        if (!cats.includes("Must Do")) cats.push("Must Do");
+      }
+      if (normalized === "faang" || normalized === "faang favorite" || normalized === "faang-favorite" || normalized === "🔥") {
+        if (!cats.includes("FAANG Favorite")) cats.push("FAANG Favorite");
+      }
+      if (normalized === "service" || normalized === "service company" || normalized === "service-company-favorite" || normalized === "🟢") {
+        if (!cats.includes("Service Company Favorite")) cats.push("Service Company Favorite");
+      }
+      if (normalized === "gem" || normalized === "hidden gem" || normalized === "hidden-gem" || normalized === "💎") {
+        if (!cats.includes("Hidden Gem")) cats.push("Hidden Gem");
+      }
+      if (normalized === "revision" || normalized === "revision question" || normalized === "revision-question" || normalized === "🚀") {
+        if (!cats.includes("Revision Question")) cats.push("Revision Question");
+      }
+      if (normalized === "pattern" || normalized === "pattern builder" || normalized === "pattern-builder" || normalized === "🧠") {
+        if (!cats.includes("Pattern Builder")) cats.push("Pattern Builder");
+      }
+    }
+  }
+
+  const titleLower = problem.title.toLowerCase();
+  const patternLower = (problem.pattern || "").toLowerCase();
+  const topicLower = (problem.topic?.name || "").toLowerCase();
+  const difficulty = problem.difficulty;
+  const rating = problem.rating ?? 0;
+
+  // 1. Pattern Builder
+  if (
+    titleLower.includes("implement") ||
+    titleLower.includes("design") ||
+    titleLower.includes("basic") ||
+    titleLower.includes("structure") ||
+    patternLower.includes("basics") ||
+    patternLower.includes("template") ||
+    titleLower.includes("trie") ||
+    patternLower.includes("trie")
+  ) {
+    if (!cats.includes("Pattern Builder")) cats.push("Pattern Builder");
+  }
+
+  // 2. Must Do
+  if (
+    rating >= 9 ||
+    titleLower.includes("two sum") ||
+    titleLower.includes("palindrome") ||
+    titleLower.includes("reverse integer") ||
+    titleLower.includes("climbing stairs") ||
+    titleLower.includes("lru cache") ||
+    titleLower.includes("merge k sorted")
+  ) {
+    if (!cats.includes("Must Do")) cats.push("Must Do");
+  }
+
+  // 3. FAANG Favorite
+  if (
+    (difficulty === "Medium" || difficulty === "Hard") &&
+    (topicLower.includes("tree") ||
+      topicLower.includes("graph") ||
+      topicLower.includes("dynamic programming") ||
+      topicLower.includes("backtracking") ||
+      topicLower.includes("trie") ||
+      topicLower.includes("segment") ||
+      topicLower.includes("sliding window") ||
+      rating >= 9)
+  ) {
+    if (!cats.includes("FAANG Favorite")) cats.push("FAANG Favorite");
+  }
+
+  // 4. Service Company Favorite
+  if (
+    (difficulty === "Easy" || difficulty === "Medium") &&
+    (topicLower.includes("foundation") ||
+      topicLower.includes("array") ||
+      topicLower.includes("string") ||
+      topicLower.includes("hash") ||
+      topicLower.includes("math"))
+  ) {
+    if (rating <= 8) {
+      if (!cats.includes("Service Company Favorite")) cats.push("Service Company Favorite");
+    }
+  }
+
+  // 5. Hidden Gem
+  if (
+    (rating === 8 || rating === 9) &&
+    !cats.includes("Must Do") &&
+    (titleLower.includes("stream") ||
+      titleLower.includes("map") ||
+      titleLower.includes("sum") ||
+      titleLower.includes("prefix") ||
+      titleLower.includes("suffix"))
+  ) {
+    if (!cats.includes("Hidden Gem")) cats.push("Hidden Gem");
+  }
+
+  // 6. Revision Question
+  if (rating >= 9 && (difficulty === "Medium" || difficulty === "Hard")) {
+    if (!cats.includes("Revision Question")) cats.push("Revision Question");
+  }
+
+  // Fallback so every problem has at least one tag
+  if (cats.length === 0) {
+    if (difficulty === "Easy") {
+      cats.push("Service Company Favorite");
+    } else {
+      cats.push("Pattern Builder");
+    }
+  }
+
+  return cats;
+}
+
 declare const __LOGIN_USERNAME__: string;
 declare const __LOGIN_PASSWORD__: string;
 
@@ -145,7 +264,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<Status | "all" | "revision">("all");
   const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">("all");
   const [selectedTopic, setSelectedTopic] = useState<string>("all");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -153,6 +272,8 @@ export default function App() {
   const [drawerMode, setDrawerMode] = useState<"edit" | "notes">("notes");
   const [editMode, setEditMode] = useState(false);
   const [expandedProblems, setExpandedProblems] = useState<Set<string>>(() => new Set());
+  const [expandedTopics, setExpandedTopics] = useState<Set<string>>(() => new Set());
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set());
   const [form, setForm] = useState<ProblemFormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -249,13 +370,20 @@ export default function App() {
     setActiveProblem(null);
     setDrawerMode("notes");
     setExpandedProblems(new Set());
+    setExpandedTopics(new Set());
+    setExpandedSections(new Set());
     setForm(emptyForm);
   }
 
   const filteredProblems = useMemo(() => {
     return problems.filter((problem) => {
       const matchesTopic = selectedTopic === "all" || problem.topic._id === selectedTopic;
-      const matchesStatus = statusFilter === "all" || problem.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "all"
+          ? true
+          : statusFilter === "revision"
+          ? problem.isPinned
+          : problem.status === statusFilter;
       const matchesDifficulty =
         difficultyFilter === "all" || problem.difficulty === difficultyFilter;
       const needle = search.trim().toLowerCase();
@@ -269,6 +397,7 @@ export default function App() {
           problem.shortNote,
           problem.longNote,
           ...problem.tags,
+          ...getProblemCategories(problem),
         ]
           .join(" ")
           .toLowerCase()
@@ -306,42 +435,82 @@ export default function App() {
     });
   }, [filteredProblems, selectedTopic]);
 
-  const groupedFilteredProblems = useMemo(() => {
-    const groups: Array<{
-      key: string;
-      name: string;
-      order: number;
-      problems: Array<{ problem: Problem; displayIndex: number }>;
+  const groupedByTopicAndSection = useMemo(() => {
+    const topicGroups: Array<{
+      topicId: string;
+      topicName: string;
+      accent: string;
+      sections: Array<{
+        sectionKey: string;
+        sectionName: string;
+        problems: Array<{ problem: Problem; displayIndex: number }>;
+      }>;
     }> = [];
-    const groupsByKey = new Map<string, (typeof groups)[number]>();
+    const topicGroupsByKey = new Map<string, typeof topicGroups[number]>();
     let displayIndex = 1;
 
     for (const problem of sortedFilteredProblems) {
+      const topicId = problem.topic._id;
+      const topicName = problem.topic.name;
+      const accent = problem.topic.accent;
+
+      let topicGroup = topicGroupsByKey.get(topicId);
+      if (!topicGroup) {
+        topicGroup = {
+          topicId,
+          topicName,
+          accent,
+          sections: [],
+        };
+        topicGroups.push(topicGroup);
+        topicGroupsByKey.set(topicId, topicGroup);
+      }
+
       const sectionName = problem.roadmapSection?.trim() || "General";
       const sectionOrder = problem.roadmapSectionOrder ?? 999;
-      const sectionKey =
-        selectedTopic === "all"
-          ? `${problem.topic._id}:${sectionOrder}:${sectionName}`
-          : `${sectionOrder}:${sectionName}`;
-      const existingGroup = groupsByKey.get(sectionKey);
+      // sectionKey is unique across the app using topicId and section name
+      const sectionKey = `${topicId}:${sectionOrder}:${sectionName}`;
 
-      if (existingGroup) {
-        existingGroup.problems.push({ problem, displayIndex });
-      } else {
-        const group = {
-          key: sectionKey,
-          name: sectionName,
-          order: sectionOrder,
-          problems: [{ problem, displayIndex }],
+      let sectionGroup = topicGroup.sections.find((s) => s.sectionKey === sectionKey);
+      if (!sectionGroup) {
+        sectionGroup = {
+          sectionKey,
+          sectionName,
+          problems: [],
         };
-        groups.push(group);
-        groupsByKey.set(sectionKey, group);
+        topicGroup.sections.push(sectionGroup);
       }
+
+      sectionGroup.problems.push({ problem, displayIndex });
       displayIndex += 1;
     }
 
-    return groups;
-  }, [selectedTopic, sortedFilteredProblems]);
+    return topicGroups;
+  }, [sortedFilteredProblems]);
+
+  function toggleTopicExpanded(topicId: string) {
+    setExpandedTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(topicId)) {
+        next.delete(topicId);
+      } else {
+        next.add(topicId);
+      }
+      return next;
+    });
+  }
+
+  function toggleSectionExpanded(sectionKey: string) {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionKey)) {
+        next.delete(sectionKey);
+      } else {
+        next.add(sectionKey);
+      }
+      return next;
+    });
+  }
 
   function openAddDrawer(topicId?: string) {
     setActiveProblem(null);
@@ -699,12 +868,11 @@ export default function App() {
             onChange={(event) => setSearch(event.target.value)}
           />
 
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Status | "all")}>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Status | "all" | "revision")}>
             <option value="all">All status</option>
             <option value="unsolved">Unsolved</option>
             <option value="solved">Solved</option>
-            <option value="revisit">Revisit</option>
-            <option value="skipped">Skipped</option>
+            <option value="revision">Revision</option>
           </select>
 
           <select
@@ -736,126 +904,260 @@ export default function App() {
           ) : filteredProblems.length === 0 ? (
             <div className="empty-state">No problems yet.</div>
           ) : (
-            <div className="problem-table">
-              {groupedFilteredProblems.map((group) => (
-                <section key={group.key} className="problem-group">
-                  {selectedTopicData && group.name !== "General" ? (
-                    <div className="problem-group-heading">{group.name}</div>
-                  ) : null}
-                  {group.problems.map(({ problem, displayIndex }) => (
-                <article
-                  key={problem._id}
-                  className={`problem-row ${expandedProblems.has(problem._id) ? "expanded" : ""}`}
-                  onClick={() => openEditDrawer(problem)}
-                >
-                  <button
-                    className="row-index"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleProblemExpanded(problem._id);
-                    }}
-                  >
-                    {displayIndex}
-                  </button>
-                  <div className="row-main">
-                    <div className="row-compact">
-                      <div className="row-title-line">
-                        <h4>{problem.title}</h4>
-                        {problem.isPinned ? <span className="pin-badge">Pinned</span> : null}
-                        {problem.pattern ? <span className="pattern-chip">{problem.pattern}</span> : null}
-                        {problem.rating ? <span className="rating-chip">{formatRating(problem.rating)}</span> : null}
-                      </div>
-                      <div className="row-inline">
-                        <a
-                          className="link-chip"
-                          href={problem.platformUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          onClick={(event) => event.stopPropagation()}
+            <div className="problem-table-container">
+              <table className="dsa-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: "90px" }}>Status</th>
+                    <th>Problem</th>
+                    <th style={{ width: "120px" }}>Importance</th>
+                    <th style={{ width: "100px" }}>Practice</th>
+                    <th style={{ width: "80px" }}>Note</th>
+                    <th style={{ width: "90px" }}>Revision</th>
+                    <th style={{ width: "120px" }}>Difficulty</th>
+                    <th style={{ width: "125px" }}>Focus</th>
+                    <th style={{ width: "200px" }}>Meaning</th>
+                    {editMode ? <th style={{ width: "90px" }}>Actions</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedByTopicAndSection.map((group) => {
+                    const solvedCount = group.sections.reduce(
+                      (acc, sec) => acc + sec.problems.filter(p => p.problem.status === "solved").length,
+                      0
+                    );
+                    const totalCount = group.sections.reduce((acc, sec) => acc + sec.problems.length, 0);
+                    const isTopicExpanded = expandedTopics.has(group.topicId);
+
+                    return (
+                      <Fragment key={group.topicId}>
+                        <tr
+                          className="table-topic-header-row"
+                          onClick={() => toggleTopicExpanded(group.topicId)}
+                          style={{ cursor: "pointer" }}
                         >
-                          Link
-                        </a>
-                        <span className={`difficulty-chip ${difficultyTone[problem.difficulty]}`}>
-                          {problem.difficulty}
-                        </span>
-                        <span className={`status-chip status-${problem.status}`}>
-                          {statusLabels[problem.status]}
-                        </span>
-                      </div>
-                    </div>
-
-                    {expandedProblems.has(problem._id) ? (
-                      <div className="problem-more">
-                        <div className="problem-meta-grid">
-                          <span>{problem.platformName}</span>
-                          <span>{problem.topic.name}</span>
-                          {problem.pattern ? <span>Pattern: {problem.pattern}</span> : null}
-                          {problem.rating ? <span>Rating: {formatRating(problem.rating)}</span> : null}
-                          <span>Priority: {problem.priority}</span>
-                          <span>Updated: {new Date(problem.updatedAt).toLocaleDateString()}</span>
-                          <span>{problem.isPinned ? "Pinned" : "Not pinned"}</span>
-                        </div>
-                        <p className="row-note">{problem.shortNote || "No note."}</p>
-                        {problem.longNote ? (
-                          <p className="row-note row-note-2">{problem.longNote}</p>
-                        ) : null}
-                        <div className="tag-row">
-                          {problem.tags.length > 0 ? (
-                            problem.tags.map((tag) => (
-                              <span key={tag} className="tag-chip">
-                                {tag}
+                          <td colSpan={editMode ? 10 : 9} className="table-topic-header-cell">
+                            <div className="topic-header-content">
+                              <span className="expand-arrow" style={{ color: group.accent }}>{isTopicExpanded ? "▼" : "▶"}</span>
+                              <span className="topic-name">{group.topicName}</span>
+                              <span className="topic-stats-badge">
+                                {solvedCount} / {totalCount} Solved
                               </span>
-                            ))
-                          ) : (
-                            <span className="tag-chip">No tags</span>
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
+                            </div>
+                          </td>
+                        </tr>
 
-                  <div className="row-side">
-                    <select
-                      value={problem.status}
-                      onChange={(event) => {
-                        event.stopPropagation();
-                        void updateStatus(problem, event.target.value as Status);
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {Object.entries(statusLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="link-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleProblemExpanded(problem._id);
-                      }}
-                    >
-                      {expandedProblems.has(problem._id) ? "Less" : "More"}
-                    </button>
-                    {editMode ? (
-                      <button
-                        className="link-btn danger"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (window.confirm("Are you sure you want to delete this problem?")) {
-                            void deleteProblem(problem._id);
-                          }
-                        }}
-                      >
-                        Delete
-                      </button>
-                    ) : null}
-                  </div>
-                </article>
-                  ))}
-                </section>
-              ))}
+                        {isTopicExpanded && group.sections.map((sectionGroup) => {
+                          const isSectionExpanded = expandedSections.has(sectionGroup.sectionKey);
+                          const secSolved = sectionGroup.problems.filter(p => p.problem.status === "solved").length;
+                          const secTotal = sectionGroup.problems.length;
+                          // If there's no specific module or if it's named "General" or blank, maybe we don't show the nested header?
+                          // Wait, the prompt says: "first group problems by primary Topic, and then group problems within those topics by sub-section/module".
+                          // If a problem does not have a module, we fallback to "General" or similar, or we can just always render the module header.
+                          // Wait, let's always show it, or only if there's multiple modules or section name is not blank. Let's make it look premium.
+                          // If there's a section, let's show the header. To make it extremely consistent, we show the sub-section header!
+                          // Let's do that!
+                          const showSectionHeader = true;
+
+                          return (
+                            <Fragment key={sectionGroup.sectionKey}>
+                              {showSectionHeader && (
+                                <tr
+                                  className="table-section-header-row"
+                                  onClick={() => toggleSectionExpanded(sectionGroup.sectionKey)}
+                                  style={{ cursor: "pointer" }}
+                                >
+                                  <td colSpan={editMode ? 10 : 9} className="table-section-header-cell">
+                                    <div className="section-header-content">
+                                      <span className="expand-arrow-sub" style={{ color: group.accent }}>
+                                        {isSectionExpanded ? "▼" : "▶"}
+                                      </span>
+                                      <span className="section-name">{sectionGroup.sectionName}</span>
+                                      <span className="section-stats-badge">
+                                        {secSolved} / {secTotal} Solved
+                                      </span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+
+                              {isSectionExpanded && sectionGroup.problems.map(({ problem, displayIndex }) => {
+                                const hasNote = !!(problem.shortNote || problem.longNote);
+                                return (
+                                  <tr key={problem._id} className="table-problem-row">
+                                    <td className="status-col">
+                                      <div className="status-cell-content">
+                                        <span className="row-index-num">{displayIndex}</span>
+                                        <button
+                                          className={`status-checkbox ${problem.status === "solved" ? "checked" : ""}`}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            const newStatus = problem.status === "solved" ? "unsolved" : "solved";
+                                            void updateStatus(problem, newStatus);
+                                          }}
+                                          aria-label="Toggle status"
+                                        >
+                                          {problem.status === "solved" ? (
+                                            <span className="checkbox-inner-dot" />
+                                          ) : null}
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td className="problem-title-col" onClick={() => openEditDrawer(problem)}>
+                                      <div className="problem-title-wrapper">
+                                        <span className="problem-title-text">{problem.title}</span>
+                                        {problem.pattern ? <span className="pattern-chip">{problem.pattern}</span> : null}
+                                      </div>
+                                    </td>
+                                    <td className="importance-col">
+                                      {problem.rating ? (
+                                        <span className="importance-rating-badge">{formatRating(problem.rating)}</span>
+                                      ) : (
+                                        <span className="importance-rating-empty">-</span>
+                                      )}
+                                    </td>
+                                    <td className="practice-col">
+                                      <a
+                                        href={problem.platformUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="practice-platform-link"
+                                        onClick={(event) => event.stopPropagation()}
+                                        title={`Practice on ${problem.platformName}`}
+                                      >
+                                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="practice-icon">
+                                          <polyline points="16 18 22 12 16 6"></polyline>
+                                          <polyline points="8 6 2 12 8 18"></polyline>
+                                        </svg>
+                                      </a>
+                                    </td>
+                                    <td className="note-col">
+                                      <button
+                                        className={`table-note-btn ${hasNote ? "has-note" : ""}`}
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          openEditDrawer(problem);
+                                        }}
+                                        title="Edit Note"
+                                      >
+                                        {hasNote ? (
+                                          <svg viewBox="0 0 24 24" width="18" height="18" stroke="#22c55e" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                                          </svg>
+                                        ) : (
+                                          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="12" y1="8" x2="12" y2="16"></line>
+                                            <line x1="8" y1="12" x2="16" y2="12"></line>
+                                          </svg>
+                                        )}
+                                      </button>
+                                    </td>
+                                    <td className="revision-col">
+                                      <button
+                                        className={`table-star-btn ${problem.isPinned ? "active" : ""}`}
+                                        onClick={async (event) => {
+                                          event.stopPropagation();
+                                          try {
+                                            const newPinned = !problem.isPinned;
+                                            await api(`/api/problems/${problem._id}`, {
+                                              method: "PATCH",
+                                              body: JSON.stringify({ isPinned: newPinned }),
+                                            });
+                                            await loadData();
+                                          } catch (err) {
+                                            setError(err instanceof Error ? err.message : "Could not toggle pin");
+                                          }
+                                        }}
+                                        title="Toggle Revision"
+                                      >
+                                        <svg
+                                          viewBox="0 0 24 24"
+                                          width="20"
+                                          height="20"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          fill={problem.isPinned ? "#eab308" : "none"}
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        >
+                                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                        </svg>
+                                      </button>
+                                    </td>
+                                    <td className="difficulty-col">
+                                      <span className={`difficulty-pill difficulty-${problem.difficulty.toLowerCase()}`}>
+                                        {problem.difficulty}
+                                      </span>
+                                    </td>
+                                    <td className="focus-col">
+                                      <div className="focus-badges">
+                                        {getProblemCategories(problem).map((cat) => {
+                                          let emoji = "";
+                                          if (cat === "Must Do") emoji = "⭐";
+                                          else if (cat === "FAANG Favorite") emoji = "🔥";
+                                          else if (cat === "Service Company Favorite") emoji = "🟢";
+                                          else if (cat === "Hidden Gem") emoji = "💎";
+                                          else if (cat === "Revision Question") emoji = "🚀";
+                                          else if (cat === "Pattern Builder") emoji = "🧠";
+
+                                          if (!emoji) return null;
+                                          return (
+                                            <span key={cat} className="focus-badge-icon" title={cat}>
+                                              {emoji}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </td>
+                                    <td className="meaning-col">
+                                      <div className="meaning-badges">
+                                        {getProblemCategories(problem).map((cat) => {
+                                          let className = "";
+                                          if (cat === "Must Do") className = "badge-must-do";
+                                          else if (cat === "FAANG Favorite") className = "badge-faang";
+                                          else if (cat === "Service Company Favorite") className = "badge-service";
+                                          else if (cat === "Hidden Gem") className = "badge-gem";
+                                          else if (cat === "Revision Question") className = "badge-revision";
+                                          else if (cat === "Pattern Builder") className = "badge-pattern";
+
+                                          return (
+                                            <span key={cat} className={`meaning-badge ${className}`}>
+                                              {cat}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </td>
+                                    {editMode ? (
+                                      <td className="delete-col">
+                                        <button
+                                          className="table-delete-btn"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            if (window.confirm("Are you sure you want to delete this problem?")) {
+                                              void deleteProblem(problem._id);
+                                            }
+                                          }}
+                                        >
+                                          Delete
+                                        </button>
+                                      </td>
+                                    ) : null}
+                                  </tr>
+                                );
+                              })}
+                            </Fragment>
+                          );
+                        })}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
