@@ -84,10 +84,13 @@ const difficultyTone: Record<Difficulty, string> = {
   Hard: "tone-hard",
 };
 
+declare const __LOGIN_USERNAME__: string;
+declare const __LOGIN_PASSWORD__: string;
+
 const AUTH_STORAGE_KEY = "dsa-tracker-authenticated";
 const DEFAULT_LOGIN = {
-  username: import.meta.env.VITE_LOGIN_USERNAME?.trim() ?? "",
-  password: import.meta.env.VITE_LOGIN_PASSWORD ?? "",
+  username: __LOGIN_USERNAME__.trim(),
+  password: __LOGIN_PASSWORD__,
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -171,7 +174,7 @@ export default function App() {
     event.preventDefault();
 
     if (!loginConfigured) {
-      setLoginError("Set VITE_LOGIN_USERNAME and VITE_LOGIN_PASSWORD in your .env file.");
+      setLoginError("Set USERNAME and PASSWORD in your .env file.");
       return;
     }
 
@@ -235,7 +238,7 @@ export default function App() {
               </div>
             ) : (
               <div className="banner error">
-                Set <code>VITE_LOGIN_USERNAME</code> and <code>VITE_LOGIN_PASSWORD</code> in your{" "}
+                Set <code>USERNAME</code> and <code>PASSWORD</code> in your{" "}
                 <code>.env</code> file to enable sign in.
               </div>
             )}
