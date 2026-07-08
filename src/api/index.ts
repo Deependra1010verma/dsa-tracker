@@ -457,6 +457,7 @@ await connectDb(mongoUri);
 await ensureSeedTopics();
 await ensureSeedProblems();
 
-app.listen(port, "127.0.0.1", () => {
-  console.log(`DSA Tracker API running on http://127.0.0.1:${port}`);
+const host = process.env.NODE_ENV === "production" || process.env.PORT ? "0.0.0.0" : "127.0.0.1";
+app.listen(port, host, () => {
+  console.log(`DSA Tracker API running on http://${host}:${port}`);
 });
