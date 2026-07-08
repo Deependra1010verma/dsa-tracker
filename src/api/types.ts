@@ -14,10 +14,15 @@ export type TopicSeed = {
 export type ProblemSeed = {
   title: string;
   topicSlug: string;
+  roadmapSection?: string;
+  roadmapSectionOrder?: number;
+  roadmapOrder?: number;
   platformName: string;
   platformUrl: string;
   difficulty: Difficulty;
   status: ProblemStatus;
+  pattern?: string;
+  rating?: number;
   shortNote: string;
   longNote: string;
   tags: string[];

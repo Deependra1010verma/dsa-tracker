@@ -25,24 +25,35 @@ function normalizeSearch(value: unknown) {
 }
 
 async function ensureSeedTopics() {
-  const topicCount = await Topic.countDocuments();
-  if (topicCount > 0) {
-    return;
-  }
+  const operations = topicSeeds.map((seed) => ({
+    updateOne: {
+      filter: { slug: seed.slug },
+      update: {
+        $set: {
+          name: seed.name,
+          order: seed.order,
+          targetCount: seed.targetCount,
+          description: seed.description,
+          accent: seed.accent,
+        },
+        $setOnInsert: {
+          slug: seed.slug,
+        },
+      },
+      upsert: true,
+    },
+  }));
 
-  await Topic.insertMany(topicSeeds);
+  if (operations.length > 0) {
+    await Topic.bulkWrite(operations);
+  }
 }
 
 async function ensureSeedProblems() {
-  const problemCount = await Problem.countDocuments();
-  if (problemCount > 0) {
-    return;
-  }
-
   const topics = await Topic.find({ slug: { $in: problemSeeds.map((seed) => seed.topicSlug) } });
   const topicsBySlug = new Map(topics.map((topic) => [topic.slug, topic._id]));
 
-  const demoProblems = problemSeeds
+  const operations = problemSeeds
     .map((seed) => {
       const topicId = topicsBySlug.get(seed.topicSlug);
       if (!topicId) {
@@ -50,26 +61,41 @@ async function ensureSeedProblems() {
       }
 
       return {
-        title: seed.title,
-        topic: topicId,
-        platformName: seed.platformName,
-        platformUrl: seed.platformUrl,
-        difficulty: seed.difficulty,
-        status: seed.status,
-        shortNote: seed.shortNote,
-        longNote: seed.longNote,
-        tags: seed.tags,
-        priority: seed.priority,
-        isPinned: seed.isPinned,
-        revisionCount: seed.revisionCount ?? 0,
-        solvedAt: seed.status === "solved" ? new Date() : undefined,
-        revisitAt: seed.status === "revisit" ? new Date() : undefined,
+        updateOne: {
+          filter: { title: seed.title, topic: topicId },
+          update: {
+            $set: {
+              platformName: seed.platformName,
+              platformUrl: seed.platformUrl,
+              roadmapSection: seed.roadmapSection ?? "",
+              roadmapSectionOrder: seed.roadmapSectionOrder ?? 999,
+              roadmapOrder: seed.roadmapOrder ?? 999,
+              difficulty: seed.difficulty,
+              pattern: seed.pattern ?? "",
+              rating: seed.rating ?? 0,
+            },
+            $setOnInsert: {
+              title: seed.title,
+              topic: topicId,
+              status: seed.status,
+              shortNote: seed.shortNote,
+              longNote: seed.longNote,
+              tags: seed.tags,
+              priority: seed.priority,
+              isPinned: seed.isPinned,
+              revisionCount: seed.revisionCount ?? 0,
+              solvedAt: seed.status === "solved" ? new Date() : undefined,
+              revisitAt: seed.status === "revisit" ? new Date() : undefined,
+            },
+          },
+          upsert: true,
+        },
       };
     })
-    .filter((problem): problem is NonNullable<typeof problem> => Boolean(problem));
+    .filter((operation): operation is NonNullable<typeof operation> => Boolean(operation));
 
-  if (demoProblems.length > 0) {
-    await Problem.insertMany(demoProblems);
+  if (operations.length > 0) {
+    await Problem.bulkWrite(operations);
   }
 }
 
@@ -149,6 +175,7 @@ app.get(
         { title: { $regex: search, $options: "i" } },
         { shortNote: { $regex: search, $options: "i" } },
         { longNote: { $regex: search, $options: "i" } },
+        { pattern: { $regex: search, $options: "i" } },
         { platformName: { $regex: search, $options: "i" } },
         { tags: { $regex: search, $options: "i" } },
       ];
@@ -156,7 +183,7 @@ app.get(
 
     const problems = await Problem.find(filter)
       .populate("topic")
-      .sort({ isPinned: -1, priority: -1, updatedAt: -1 });
+      .sort({ roadmapSectionOrder: 1, roadmapOrder: 1, isPinned: -1, priority: -1, updatedAt: -1 });
 
     res.json({ problems });
   })
@@ -192,10 +219,13 @@ app.post(
     const {
       title,
       topicId,
+      roadmapSection = "",
       platformName,
       platformUrl,
       difficulty,
       status,
+      pattern = "",
+      rating = 0,
       shortNote = "",
       longNote = "",
       tags = [],
@@ -206,10 +236,13 @@ app.post(
     const created = await Problem.create({
       title,
       topic: topicId,
+      roadmapSection,
       platformName,
       platformUrl,
       difficulty,
       status,
+      pattern,
+      rating,
       shortNote,
       longNote,
       tags,
@@ -238,10 +271,13 @@ app.patch(
     Object.assign(problem, {
       title: next.title ?? problem.title,
       topic: next.topicId ?? problem.topic,
+      roadmapSection: next.roadmapSection ?? problem.roadmapSection,
       platformName: next.platformName ?? problem.platformName,
       platformUrl: next.platformUrl ?? problem.platformUrl,
       difficulty: next.difficulty ?? problem.difficulty,
       status: next.status ?? problem.status,
+      pattern: next.pattern ?? problem.pattern,
+      rating: typeof next.rating === "number" ? next.rating : problem.rating,
       shortNote: next.shortNote ?? problem.shortNote,
       longNote: next.longNote ?? problem.longNote,
       tags: Array.isArray(next.tags) ? next.tags : problem.tags,

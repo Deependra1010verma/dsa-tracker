@@ -19,6 +19,9 @@ const problemSchema = new mongoose.Schema(
     topic: { type: mongoose.Schema.Types.ObjectId, ref: "Topic", required: true },
     platformName: { type: String, required: true },
     platformUrl: { type: String, required: true },
+    roadmapSection: { type: String, default: "" },
+    roadmapSectionOrder: { type: Number, default: 999 },
+    roadmapOrder: { type: Number, default: 999 },
     difficulty: {
       type: String,
       enum: ["Easy", "Medium", "Hard"],
@@ -31,6 +34,8 @@ const problemSchema = new mongoose.Schema(
     },
     shortNote: { type: String, default: "" },
     longNote: { type: String, default: "" },
+    pattern: { type: String, default: "" },
+    rating: { type: Number, default: 0 },
     revisionCount: { type: Number, default: 0 },
     solvedAt: { type: Date },
     revisitAt: { type: Date },
@@ -46,4 +51,3 @@ problemSchema.index({ title: "text", shortNote: "text", longNote: "text", platfo
 export const Topic = mongoose.model("Topic", topicSchema);
 export const Problem = mongoose.model("Problem", problemSchema);
 export { topicSeeds };
-
