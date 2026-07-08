@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type Difficulty = "Easy" | "Medium" | "Hard";
 type Status = "unsolved" | "solved" | "revisit" | "skipped";
@@ -84,6 +84,12 @@ const difficultyTone: Record<Difficulty, string> = {
   Hard: "tone-hard",
 };
 
+const AUTH_STORAGE_KEY = "dsa-tracker-authenticated";
+const DEFAULT_LOGIN = {
+  username: import.meta.env.VITE_LOGIN_USERNAME?.trim() ?? "",
+  password: import.meta.env.VITE_LOGIN_PASSWORD ?? "",
+};
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: {
@@ -102,6 +108,19 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export default function App() {
+  const loginConfigured = Boolean(DEFAULT_LOGIN.username && DEFAULT_LOGIN.password);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem(AUTH_STORAGE_KEY) === "true";
+  });
+  const [loginForm, setLoginForm] = useState({
+    username: DEFAULT_LOGIN.username,
+    password: "",
+  });
+  const [loginError, setLoginError] = useState("");
   const [topics, setTopics] = useState<Topic[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -141,8 +160,129 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
     void loadData();
-  }, []);
+  }, [isAuthenticated]);
+
+  function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!loginConfigured) {
+      setLoginError("Set VITE_LOGIN_USERNAME and VITE_LOGIN_PASSWORD in your .env file.");
+      return;
+    }
+
+    if (
+      loginForm.username.trim() === DEFAULT_LOGIN.username &&
+      loginForm.password === DEFAULT_LOGIN.password
+    ) {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
+      setLoginError("");
+      setIsAuthenticated(true);
+      return;
+    }
+
+    setLoginError("Invalid username or password.");
+  }
+
+  function handleLogout() {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    setIsAuthenticated(false);
+    setLoginError("");
+    setError("");
+    setLoading(true);
+    setTopics([]);
+    setProblems([]);
+    setStats(null);
+    setSearch("");
+    setStatusFilter("all");
+    setDifficultyFilter("all");
+    setSelectedTopic("all");
+    setDrawerOpen(false);
+    setActiveProblem(null);
+    setForm(emptyForm);
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-hero">
+          <div className="brand auth-brand">
+            <div className="brand-mark">DSA</div>
+            <div>
+              <h1>Tracker</h1>
+              <p>Private DSA practice board with a simple login gate.</p>
+            </div>
+          </div>
+
+          <div className="auth-copy">
+            <p className="eyebrow">Welcome back</p>
+            <h2>Log in to open your tracker.</h2>
+            <p className="hero-copy">
+              Use the default credentials below to enter the app. Once inside, you can manage
+              topics, problem records, notes, and revision flow.
+            </p>
+
+            {loginConfigured ? (
+              <div className="credential-card">
+                <span>Default username</span>
+                <strong>{DEFAULT_LOGIN.username}</strong>
+                <span>Default password</span>
+                <strong>{DEFAULT_LOGIN.password}</strong>
+              </div>
+            ) : (
+              <div className="banner error">
+                Set <code>VITE_LOGIN_USERNAME</code> and <code>VITE_LOGIN_PASSWORD</code> in your{" "}
+                <code>.env</code> file to enable sign in.
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="auth-card">
+          <p className="panel-label">Secure access</p>
+          <h3>Sign in</h3>
+          <p className="auth-note">This is a lightweight local login for the personal tracker.</p>
+
+          <form className="auth-form" onSubmit={handleLogin}>
+            <label>
+              Username
+              <input
+                value={loginForm.username}
+                onChange={(event) =>
+                  setLoginForm({ ...loginForm, username: event.target.value })
+                }
+                autoComplete="username"
+                placeholder="name@example.com"
+              />
+            </label>
+
+            <label>
+              Password
+              <input
+                type="password"
+                value={loginForm.password}
+                onChange={(event) =>
+                  setLoginForm({ ...loginForm, password: event.target.value })
+                }
+                autoComplete="current-password"
+                placeholder="Password"
+              />
+            </label>
+
+            {loginError ? <div className="banner error">{loginError}</div> : null}
+
+            <button className="primary-btn auth-submit" type="submit">
+              Enter Tracker
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
 
   const filteredProblems = useMemo(() => {
     return problems.filter((problem) => {
@@ -327,6 +467,9 @@ export default function App() {
             </button>
             <button className="secondary-btn" onClick={loadData}>
               Refresh
+            </button>
+            <button className="ghost-btn" onClick={handleLogout}>
+              Logout
             </button>
           </div>
         </section>

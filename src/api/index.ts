@@ -262,6 +262,6 @@ app.use(
 await connectDb(mongoUri);
 await ensureSeedTopics();
 
-app.listen(port, () => {
-  console.log(`DSA Tracker API running on http://localhost:${port}`);
+app.listen(port, "127.0.0.1", () => {
+  console.log(`DSA Tracker API running on http://127.0.0.1:${port}`);
 });

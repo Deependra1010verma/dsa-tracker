@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -7,18 +8,70 @@ const tsxCli = path.join(rootDir, "node_modules", "tsx", "dist", "cli.mjs");
 const viteCli = path.join(rootDir, "node_modules", "vite", "bin", "vite.js");
 const nodeBin = process.execPath;
 
-const children = [
-  spawn(nodeBin, [tsxCli, "watch", "src/api/index.ts"], {
+const apiUrl = "http://127.0.0.1:4000/api/health";
+
+const apiChild = spawn(nodeBin, [tsxCli, "watch", "src/api/index.ts"], {
+  cwd: rootDir,
+  stdio: "inherit",
+  env: process.env,
+});
+
+let viteChild = null;
+const children = [apiChild];
+
+async function waitForApi() {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      const response = await fetch(apiUrl);
+      if (response.ok) {
+        return true;
+      }
+    } catch {
+      // Keep polling until the API is ready or exits.
+    }
+
+    if (apiChild.exitCode !== null || apiChild.signalCode !== null) {
+      return false;
+    }
+
+    await delay(250);
+  }
+
+  return false;
+}
+
+async function startVite() {
+  const apiReady = await waitForApi();
+  if (!apiReady) {
+    process.stderr.write("API did not become ready on http://127.0.0.1:4000/api/health\n");
+    shutdown();
+    process.exitCode = 1;
+    return;
+  }
+
+  viteChild = spawn(nodeBin, [viteCli], {
     cwd: rootDir,
     stdio: "inherit",
     env: process.env,
-  }),
-  spawn(nodeBin, [viteCli], {
-    cwd: rootDir,
-    stdio: "inherit",
-    env: process.env,
-  }),
-];
+  });
+  children.push(viteChild);
+
+  viteChild.on("exit", (code, signal) => {
+    if (shuttingDown) {
+      return;
+    }
+
+    if (code !== 0) {
+      shutdown();
+      process.exitCode = code ?? 1;
+      return;
+    }
+
+    if (signal) {
+      shutdown(signal);
+    }
+  });
+}
 
 let shuttingDown = false;
 
@@ -55,3 +108,5 @@ for (const child of children) {
     }
   });
 }
+
+void startVite();
