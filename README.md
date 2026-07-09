@@ -8,7 +8,8 @@ Personal MERN tracker for DSA practice.
 - Stores status: solved, unsolved, revisit, skipped
 - Stores short notes and long notes
 - Saves external platform links
-- Shows topic progress and revision queue
+- Shows topic progress and spaced repetition revision queue
+- Schedules next revisions at 1, 3, 7, 15, and 30 days after a solve/review
 
 ## Structure
 

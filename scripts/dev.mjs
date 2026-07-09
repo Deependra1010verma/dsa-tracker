@@ -18,6 +18,7 @@ const apiChild = spawn(nodeBin, [tsxCli, "watch", "src/api/index.ts"], {
 
 let viteChild = null;
 const children = [apiChild];
+let viteStarted = false;
 
 async function waitForApi() {
   for (let attempt = 0; attempt < 40; attempt += 1) {
@@ -40,15 +41,12 @@ async function waitForApi() {
   return false;
 }
 
-async function startVite() {
-  const apiReady = await waitForApi();
-  if (!apiReady) {
-    process.stderr.write("API did not become ready on http://127.0.0.1:4000/api/health\n");
-    shutdown();
-    process.exitCode = 1;
+function startViteNow() {
+  if (viteStarted) {
     return;
   }
 
+  viteStarted = true;
   viteChild = spawn(nodeBin, [viteCli], {
     cwd: rootDir,
     stdio: "inherit",
@@ -71,6 +69,17 @@ async function startVite() {
       shutdown(signal);
     }
   });
+}
+
+async function startVite() {
+  const apiReady = await waitForApi();
+  if (!apiReady) {
+    process.stderr.write("API not ready yet; starting frontend anyway so the site can load.\n");
+    startViteNow();
+    return;
+  }
+
+  startViteNow();
 }
 
 let shuttingDown = false;

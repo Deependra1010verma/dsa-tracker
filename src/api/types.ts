@@ -29,4 +29,8 @@ export type ProblemSeed = {
   priority: number;
   isPinned: boolean;
   revisionCount?: number;
+  revisionStage?: number;
+  lastRevisionAt?: Date;
+  nextRevisionAt?: Date;
+  revisionCompletedAt?: Date;
 };

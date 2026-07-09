@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, Fragment, type FormEvent } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, Fragment, type FormEvent } from "react";
+import { topicSubCategories } from "./data/categories";
 
 type Difficulty = "Easy" | "Medium" | "Hard";
 type Status = "unsolved" | "solved" | "revisit" | "skipped";
@@ -29,10 +30,14 @@ type Problem = {
   pattern?: string;
   rating?: number;
   shortNote: string;
-  longNote: string;
+  longNote?: string;
   revisionCount: number;
+  revisionStage?: number;
   solvedAt?: string;
   revisitAt?: string;
+  lastRevisionAt?: string;
+  nextRevisionAt?: string;
+  revisionCompletedAt?: string;
   tags: string[];
   priority: number;
   isPinned: boolean;
@@ -95,8 +100,152 @@ const difficultyTone: Record<Difficulty, string> = {
   Hard: "tone-hard",
 };
 
+const spacedRevisionDays = [1, 3, 7, 15, 30] as const;
+
+type RevisionState = {
+  stage: number;
+  label: string;
+  subtitle: string;
+  dueDate: Date | null;
+  isDue: boolean;
+  isOverdue: boolean;
+  isComplete: boolean;
+  isScheduled: boolean;
+  daysAway: number | null;
+};
+
+type ProblemRowProps = {
+  problem: Problem;
+  displayIndex: number;
+  canEdit: boolean;
+  revisionState: RevisionState;
+  categories: string[];
+  onToggleStatus: (problem: Problem, nextStatus: Status) => void;
+  onOpenEdit: (problem: Problem) => void;
+  onTogglePin: (problem: Problem) => void;
+  onOpenLink: (problem: Problem) => void;
+  onDelete: (problemId: string) => void;
+  rowLimit: number;
+  onLoadMore: () => void;
+};
+
+type SectionBlockProps = {
+  group: {
+    sectionKey: string;
+    sectionName: string;
+    solvedCount: number;
+    totalCount: number;
+    problems: Array<{ problem: Problem; displayIndex: number }>;
+  };
+  accent: string;
+  canEdit: boolean;
+  revisionStateMap: Map<string, RevisionState>;
+  problemCategoryMap: Map<string, string[]>;
+  nowDate: Date;
+  onToggleStatus: (problem: Problem, nextStatus: Status) => void;
+  onOpenEdit: (problem: Problem) => void;
+  onTogglePin: (problem: Problem) => void;
+  onOpenLink: (problem: Problem) => void;
+  onDelete: (problemId: string) => void;
+};
+
 function formatRating(rating?: number) {
   return typeof rating === "number" && rating > 0 ? `${rating}/10` : "";
+}
+
+function toValidDate(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function daysBetween(now: Date, target: Date) {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((startOfDay(target).getTime() - startOfDay(now).getTime()) / msPerDay);
+}
+
+function formatRevisionDueText(daysAway: number | null, isDue: boolean, isComplete: boolean) {
+  if (isComplete) {
+    return "Completed";
+  }
+
+  if (daysAway === null) {
+    return "Scheduled";
+  }
+
+  if (daysAway < 0) {
+    return `Overdue by ${Math.abs(daysAway)} day${Math.abs(daysAway) === 1 ? "" : "s"}`;
+  }
+
+  if (daysAway === 0) {
+    return isDue ? "Due today" : "Today";
+  }
+
+  if (daysAway === 1) {
+    return "Tomorrow";
+  }
+
+  return `${daysAway} days`;
+}
+
+function getRevisionState(problem: Problem, now: Date): RevisionState {
+  const solvedAt = toValidDate(problem.solvedAt);
+  const revisitAt = toValidDate(problem.revisitAt);
+  const lastRevisionAt = toValidDate(problem.lastRevisionAt);
+  const nextRevisionAt = toValidDate(problem.nextRevisionAt);
+  const completedAt = toValidDate(problem.revisionCompletedAt);
+  const anchor = lastRevisionAt ?? revisitAt ?? solvedAt ?? toValidDate(problem.updatedAt) ?? now;
+  const stage = Math.max(problem.revisionStage ?? (problem.revisionCount > 0 ? Math.min(problem.revisionCount - 1, spacedRevisionDays.length) : 0), 0);
+  const isComplete = Boolean(completedAt || (stage >= spacedRevisionDays.length && !nextRevisionAt));
+  const isScheduled = problem.status === "solved" || problem.status === "revisit";
+
+  if (!isScheduled) {
+    return {
+      stage,
+      label: "",
+      subtitle: "",
+      dueDate: null,
+      isDue: false,
+      isOverdue: false,
+      isComplete,
+      isScheduled: false,
+      daysAway: null,
+    };
+  }
+
+  const fallbackDueDate = nextRevisionAt ?? addDays(anchor, spacedRevisionDays[Math.min(stage, spacedRevisionDays.length - 1)] ?? 1);
+  const dueDate = isComplete ? null : fallbackDueDate;
+  const daysAway = dueDate ? daysBetween(now, dueDate) : null;
+  const isDue = dueDate ? daysAway <= 0 : false;
+  const isOverdue = dueDate ? daysAway < 0 : false;
+  const nextStep = spacedRevisionDays[Math.min(stage, spacedRevisionDays.length - 1)];
+
+  return {
+    stage,
+    label: isComplete ? "Revision complete" : stage === 0 ? "Tomorrow" : `${nextStep} days`,
+    subtitle: formatRevisionDueText(daysAway, isDue, isComplete),
+    dueDate,
+    isDue,
+    isOverdue,
+    isComplete,
+    isScheduled: true,
+    daysAway,
+  };
 }
 
 function getProblemCategories(problem: Problem): string[] {
@@ -218,6 +367,233 @@ function getProblemCategories(problem: Problem): string[] {
   return cats;
 }
 
+const ProblemRow = memo(function ProblemRow({
+  problem,
+  displayIndex,
+  canEdit,
+  revisionState,
+  categories,
+  onToggleStatus,
+  onOpenEdit,
+  onTogglePin,
+  onOpenLink,
+  onDelete,
+}: ProblemRowProps) {
+  const hasNote = Boolean(problem.shortNote || problem.longNote);
+
+  return (
+    <tr className="table-problem-row">
+      <td className="status-col">
+        <div className="status-cell-content">
+          <span className="row-index-num">{displayIndex}</span>
+          <button
+            type="button"
+            className={`status-checkbox ${problem.status === "solved" ? "checked" : ""}`}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleStatus(problem, problem.status === "solved" ? "unsolved" : "solved");
+            }}
+            aria-label="Toggle status"
+          >
+            {problem.status === "solved" ? <span className="checkbox-inner-dot" /> : null}
+          </button>
+        </div>
+      </td>
+      <td className="problem-title-col" onClick={() => onOpenEdit(problem)}>
+        <div className="problem-title-wrapper">
+          <span className="problem-title-text">{problem.title}</span>
+          {problem.pattern ? <span className="pattern-chip">{problem.pattern}</span> : null}
+        </div>
+      </td>
+      <td className="importance-col">
+        {problem.rating ? <span className="importance-rating-badge">{formatRating(problem.rating)}</span> : <span className="importance-rating-empty">-</span>}
+      </td>
+      <td className="practice-col">
+        <a
+          href={problem.platformUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="practice-platform-link"
+          onClick={(event) => event.stopPropagation()}
+          title={`Practice on ${problem.platformName}`}
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="practice-icon">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+        </a>
+      </td>
+      <td className="note-col">
+        <button
+          className={`table-note-btn ${hasNote ? "has-note" : ""}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenEdit(problem);
+          }}
+          title="Edit Note"
+        >
+          {hasNote ? (
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="#22c55e" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="16"></line>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+          )}
+        </button>
+      </td>
+      <td className="revision-col">
+        <button
+          className={`table-star-btn ${problem.isPinned ? "active" : ""}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onTogglePin(problem);
+          }}
+          title="Toggle revision star"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            stroke="currentColor"
+            strokeWidth="2"
+            fill={problem.isPinned ? "#eab308" : "none"}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        </button>
+      </td>
+      <td className="difficulty-col">
+        <span className={`difficulty-pill difficulty-${problem.difficulty.toLowerCase()}`}>{problem.difficulty}</span>
+      </td>
+      <td className="focus-col">
+        <div className="focus-badges">
+          {categories.map((cat) => {
+            let emoji = "";
+            if (cat === "Must Do") emoji = "⭐";
+            else if (cat === "FAANG Favorite") emoji = "🔥";
+            else if (cat === "Service Company Favorite") emoji = "🟢";
+            else if (cat === "Hidden Gem") emoji = "💎";
+            else if (cat === "Revision Question") emoji = "🚀";
+            else if (cat === "Pattern Builder") emoji = "🧠";
+
+            if (!emoji) return null;
+            return (
+              <span key={cat} className="focus-badge-icon" title={cat}>
+                {emoji}
+              </span>
+            );
+          })}
+        </div>
+      </td>
+      <td className="meaning-col">
+        <div className="meaning-badges">
+          {categories.map((cat) => {
+            let className = "";
+            if (cat === "Must Do") className = "badge-must-do";
+            else if (cat === "FAANG Favorite") className = "badge-faang";
+            else if (cat === "Service Company Favorite") className = "badge-service";
+            else if (cat === "Hidden Gem") className = "badge-gem";
+            else if (cat === "Revision Question") className = "badge-revision";
+            else if (cat === "Pattern Builder") className = "badge-pattern";
+
+            return (
+              <span key={cat} className={`meaning-badge ${className}`}>
+                {cat}
+              </span>
+            );
+          })}
+        </div>
+      </td>
+      {canEdit ? (
+        <td className="delete-col">
+          <button
+            className="table-delete-btn"
+            onClick={(event) => {
+              event.stopPropagation();
+              if (window.confirm("Are you sure you want to delete this problem?")) {
+                onDelete(problem._id);
+              }
+            }}
+          >
+            Delete
+          </button>
+        </td>
+      ) : null}
+    </tr>
+  );
+});
+
+const SectionBlock = memo(function SectionBlock({
+  group,
+  accent,
+  canEdit,
+  revisionStateMap,
+  problemCategoryMap,
+  nowDate,
+  onToggleStatus,
+  onOpenEdit,
+  onTogglePin,
+  onOpenLink,
+  onDelete,
+  rowLimit,
+  onLoadMore,
+}: SectionBlockProps) {
+  const visibleProblems = group.problems.slice(0, rowLimit);
+  const hasMore = group.problems.length > rowLimit;
+
+  return (
+    <Fragment>
+      <tr className="table-section-header-row">
+        <td colSpan={canEdit ? 10 : 9} className="table-section-header-cell">
+          <div className="section-header-content">
+            <span className="expand-arrow-sub" style={{ color: accent }}>•</span>
+            <span className="section-name">{group.sectionName}</span>
+            <span className="section-stats-badge">
+              {group.solvedCount} / {group.totalCount} Solved
+            </span>
+          </div>
+        </td>
+      </tr>
+
+      {visibleProblems.map(({ problem, displayIndex }) => (
+        <ProblemRow
+          key={problem._id}
+          problem={problem}
+          displayIndex={displayIndex}
+          canEdit={canEdit}
+          revisionState={revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate)}
+          categories={problemCategoryMap.get(problem._id) ?? getProblemCategories(problem)}
+          onToggleStatus={onToggleStatus}
+          onOpenEdit={onOpenEdit}
+          onTogglePin={onTogglePin}
+          onOpenLink={onOpenLink}
+          onDelete={onDelete}
+        />
+      ))}
+
+      {hasMore ? (
+        <tr className="table-load-more-row">
+          <td colSpan={canEdit ? 10 : 9}>
+            <button className="table-load-more-btn" onClick={() => onLoadMore()}>
+              Load more rows
+            </button>
+          </td>
+        </tr>
+      ) : null}
+    </Fragment>
+  );
+});
+
 declare const __LOGIN_USERNAME__: string;
 declare const __LOGIN_PASSWORD__: string;
 
@@ -264,7 +640,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<Status | "all" | "revision">("all");
+  const [statusFilter, setStatusFilter] = useState<Status | "all" | "revisit">("all");
   const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">("all");
   const [selectedTopic, setSelectedTopic] = useState<string>("all");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -273,15 +649,22 @@ export default function App() {
   const [editMode, setEditMode] = useState(false);
   const [expandedProblems, setExpandedProblems] = useState<Set<string>>(() => new Set());
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(() => new Set());
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(() => new Set());
   const [form, setForm] = useState<ProblemFormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [sectionRowLimit, setSectionRowLimit] = useState(30);
+  const deferredSearch = useDeferredValue(search);
+  const nowDate = useMemo(() => new Date(now), [now]);
 
 
   const selectedTopicData = useMemo(
     () => topics.find((topic) => topic._id === selectedTopic) ?? null,
     [selectedTopic, topics]
+  );
+  const activeRevisionState = useMemo(
+    () => (activeProblem ? getRevisionState(activeProblem, nowDate) : null),
+    [activeProblem, nowDate]
   );
 
   const visibleStats = useMemo(() => {
@@ -305,6 +688,22 @@ export default function App() {
     };
   }, [problems, selectedTopic, stats]);
 
+  const problemCategoryMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const problem of problems) {
+      map.set(problem._id, getProblemCategories(problem));
+    }
+    return map;
+  }, [problems]);
+
+  const revisionStateMap = useMemo(() => {
+    const map = new Map<string, RevisionState>();
+    for (const problem of problems) {
+      map.set(problem._id, getRevisionState(problem, nowDate));
+    }
+    return map;
+  }, [nowDate, problems]);
+
   async function loadData(options?: { silent?: boolean }) {
     try {
       if (!options?.silent) {
@@ -313,7 +712,7 @@ export default function App() {
       setError("");
       const [topicsRes, problemsRes, statsRes] = await Promise.all([
         api<{ topics: Topic[] }>("/api/topics"),
-        api<{ problems: Problem[] }>("/api/problems"),
+        api<{ problems: Problem[] }>("/api/problems?brief=1"),
         api<{ stats: Stats }>("/api/stats"),
       ]);
       setTopics(topicsRes.topics);
@@ -326,6 +725,34 @@ export default function App() {
     }
   }
 
+  const upsertProblem = useCallback((updatedProblem: Problem) => {
+    setProblems((current) =>
+      current.map((problem) => (problem._id === updatedProblem._id ? updatedProblem : problem))
+    );
+  }, []);
+
+  const appendProblem = useCallback((updatedProblem: Problem) => {
+    setProblems((current) => [updatedProblem, ...current.filter((problem) => problem._id !== updatedProblem._id)]);
+  }, []);
+
+  const removeProblem = useCallback((problemId: string) => {
+    setProblems((current) => current.filter((problem) => problem._id !== problemId));
+  }, []);
+
+  const openProblemLink = useCallback((problem: Problem) => {
+    window.open(problem.platformUrl, "_blank", "noopener,noreferrer");
+  }, []);
+
+  const hydrateProblemDetails = useCallback(async (problem: Problem) => {
+    if (problem.longNote !== undefined && problem.tags.length > 0) {
+      return problem;
+    }
+
+    const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}`);
+    upsertProblem(response.problem);
+    return response.problem;
+  }, [upsertProblem]);
+
   useEffect(() => {
     if (!isAuthenticated) {
       return;
@@ -335,6 +762,11 @@ export default function App() {
       silent: topics.length > 0 || problems.length > 0 || stats !== null,
     });
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -371,22 +803,24 @@ export default function App() {
     setDrawerMode("notes");
     setExpandedProblems(new Set());
     setExpandedTopics(new Set());
-    setExpandedSections(new Set());
     setForm(emptyForm);
+    setSectionRowLimit(30);
   }
 
   const filteredProblems = useMemo(() => {
+    const needle = deferredSearch.trim().toLowerCase();
     return problems.filter((problem) => {
+      const revisionState = revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate);
+      const categories = problemCategoryMap.get(problem._id) ?? getProblemCategories(problem);
       const matchesTopic = selectedTopic === "all" || problem.topic._id === selectedTopic;
       const matchesStatus =
         statusFilter === "all"
           ? true
-          : statusFilter === "revision"
+          : statusFilter === "revisit"
           ? problem.isPinned
           : problem.status === statusFilter;
       const matchesDifficulty =
         difficultyFilter === "all" || problem.difficulty === difficultyFilter;
-      const needle = search.trim().toLowerCase();
       const matchesSearch =
         !needle ||
         [
@@ -397,7 +831,7 @@ export default function App() {
           problem.shortNote,
           problem.longNote,
           ...problem.tags,
-          ...getProblemCategories(problem),
+          ...categories,
         ]
           .join(" ")
           .toLowerCase()
@@ -405,10 +839,26 @@ export default function App() {
 
       return matchesTopic && matchesStatus && matchesDifficulty && matchesSearch;
     });
-  }, [difficultyFilter, problems, search, selectedTopic, statusFilter]);
+  }, [deferredSearch, difficultyFilter, nowDate, problemCategoryMap, problems, revisionStateMap, selectedTopic, statusFilter]);
 
   const sortedFilteredProblems = useMemo(() => {
     return [...filteredProblems].sort((left, right) => {
+      const leftRevision = revisionStateMap.get(left._id) ?? getRevisionState(left, nowDate);
+      const rightRevision = revisionStateMap.get(right._id) ?? getRevisionState(right, nowDate);
+
+      const leftRevisionScore = leftRevision.isOverdue ? 3 : leftRevision.isDue ? 2 : leftRevision.isScheduled ? 1 : 0;
+      const rightRevisionScore = rightRevision.isOverdue ? 3 : rightRevision.isDue ? 2 : rightRevision.isScheduled ? 1 : 0;
+      const revisionScoreDelta = rightRevisionScore - leftRevisionScore;
+      if (revisionScoreDelta !== 0) {
+        return revisionScoreDelta;
+      }
+
+      const leftDue = leftRevision.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+      const rightDue = rightRevision.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+      if (leftDue !== rightDue) {
+        return leftDue - rightDue;
+      }
+
       if (selectedTopic === "all") {
         const topicOrderDelta = left.topic.order - right.topic.order;
         if (topicOrderDelta !== 0) {
@@ -433,16 +883,20 @@ export default function App() {
 
       return left.title.localeCompare(right.title);
     });
-  }, [filteredProblems, selectedTopic]);
+  }, [filteredProblems, nowDate, revisionStateMap, selectedTopic]);
 
   const groupedByTopicAndSection = useMemo(() => {
     const topicGroups: Array<{
       topicId: string;
       topicName: string;
       accent: string;
+      solvedCount: number;
+      totalCount: number;
       sections: Array<{
         sectionKey: string;
         sectionName: string;
+        solvedCount: number;
+        totalCount: number;
         problems: Array<{ problem: Problem; displayIndex: number }>;
       }>;
     }> = [];
@@ -460,6 +914,8 @@ export default function App() {
           topicId,
           topicName,
           accent,
+          solvedCount: 0,
+          totalCount: 0,
           sections: [],
         };
         topicGroups.push(topicGroup);
@@ -476,19 +932,59 @@ export default function App() {
         sectionGroup = {
           sectionKey,
           sectionName,
+          solvedCount: 0,
+          totalCount: 0,
           problems: [],
         };
         topicGroup.sections.push(sectionGroup);
       }
 
       sectionGroup.problems.push({ problem, displayIndex });
+      sectionGroup.totalCount += 1;
+      topicGroup.totalCount += 1;
+      if (problem.status === "solved") {
+        sectionGroup.solvedCount += 1;
+        topicGroup.solvedCount += 1;
+      }
       displayIndex += 1;
     }
 
     return topicGroups;
   }, [sortedFilteredProblems]);
 
-  function toggleTopicExpanded(topicId: string) {
+  const revisionProblems = useMemo(
+    () => problems.filter((problem) => {
+      const state = revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate);
+      return state.isScheduled && !state.isComplete;
+    }),
+    [nowDate, problems, revisionStateMap]
+  );
+
+  const dueRevisionProblems = useMemo(() => {
+    return [...revisionProblems]
+      .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
+      .filter(({ state }) => state.isDue || state.isOverdue)
+      .sort((left, right) => {
+        const leftTime = left.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+        const rightTime = right.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+        return leftTime - rightTime;
+      })
+      .slice(0, 4);
+  }, [nowDate, revisionProblems, revisionStateMap]);
+
+  const sidebarRevisionProblems = useMemo(() => {
+    return [...revisionProblems]
+      .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
+      .filter(({ state }) => !state.isDue && !state.isOverdue && !state.isComplete && state.dueDate)
+      .sort((left, right) => {
+        const leftTime = left.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+        const rightTime = right.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+        return leftTime - rightTime;
+      })
+      .slice(0, 8);
+  }, [nowDate, revisionProblems, revisionStateMap]);
+
+  const toggleTopicExpanded = useCallback((topicId: string) => {
     setExpandedTopics((prev) => {
       const next = new Set(prev);
       if (next.has(topicId)) {
@@ -498,21 +994,9 @@ export default function App() {
       }
       return next;
     });
-  }
+  }, []);
 
-  function toggleSectionExpanded(sectionKey: string) {
-    setExpandedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(sectionKey)) {
-        next.delete(sectionKey);
-      } else {
-        next.add(sectionKey);
-      }
-      return next;
-    });
-  }
-
-  function openAddDrawer(topicId?: string) {
+  const openAddDrawer = useCallback((topicId?: string) => {
     setActiveProblem(null);
     setDrawerMode("edit");
     setForm({
@@ -521,9 +1005,9 @@ export default function App() {
       roadmapSection: selectedTopicData?.name ?? "",
     });
     setDrawerOpen(true);
-  }
+  }, [selectedTopic, selectedTopicData?.name, topics]);
 
-  function openEditDrawer(problem: Problem) {
+  const openEditDrawer = useCallback((problem: Problem) => {
     setActiveProblem(problem);
     setDrawerMode(editMode ? "edit" : "notes");
     setForm({
@@ -543,13 +1027,34 @@ export default function App() {
       isPinned: problem.isPinned,
     });
     setDrawerOpen(true);
-  }
+    void hydrateProblemDetails(problem).then((nextProblem) => {
+      setActiveProblem(nextProblem);
+      setForm({
+        title: nextProblem.title,
+        topicId: nextProblem.topic._id,
+        roadmapSection: nextProblem.roadmapSection ?? "",
+        platformName: nextProblem.platformName,
+        platformUrl: nextProblem.platformUrl,
+        difficulty: nextProblem.difficulty,
+        status: nextProblem.status,
+        pattern: nextProblem.pattern ?? "",
+        rating: nextProblem.rating ?? 0,
+        shortNote: nextProblem.shortNote,
+        longNote: nextProblem.longNote ?? "",
+        tags: nextProblem.tags.join(", "),
+        priority: nextProblem.priority,
+        isPinned: nextProblem.isPinned,
+      });
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : "Could not load problem details");
+    });
+  }, [editMode, hydrateProblemDetails]);
 
-  function openProblemDrawer(problem: Problem) {
+  const openProblemDrawer = useCallback((problem: Problem) => {
     openEditDrawer(problem);
-  }
+  }, [openEditDrawer]);
 
-  function toggleProblemExpanded(problemId: string) {
+  const toggleProblemExpanded = useCallback((problemId: string) => {
     setExpandedProblems((current) => {
       const next = new Set(current);
       if (next.has(problemId)) {
@@ -560,9 +1065,9 @@ export default function App() {
 
       return next;
     });
-  }
+  }, []);
 
-  async function saveProblem() {
+  const saveProblem = useCallback(async () => {
     if (!form.title.trim() || !form.topicId || !form.platformName.trim() || !form.platformUrl.trim()) {
       setError("Title, topic, platform name, and platform link are required.");
       return;
@@ -592,48 +1097,83 @@ export default function App() {
       };
 
       if (activeProblem) {
-        await api(`/api/problems/${activeProblem._id}`, {
+        const response = await api<{ problem: Problem }>(`/api/problems/${activeProblem._id}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
         });
+        upsertProblem(response.problem);
+        setActiveProblem(response.problem);
       } else {
-        await api("/api/problems", {
+        const response = await api<{ problem: Problem }>("/api/problems", {
           method: "POST",
           body: JSON.stringify(payload),
         });
+        appendProblem(response.problem);
       }
 
       setDrawerOpen(false);
       setActiveProblem(null);
       setForm(emptyForm);
-      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save problem");
     } finally {
       setSaving(false);
     }
-  }
+  }, [activeProblem, appendProblem, form, setError, setSaving, setDrawerOpen, setActiveProblem, setForm, upsertProblem]);
 
-  async function updateStatus(problem: Problem, nextStatus: Status) {
+  const updateStatus = useCallback(async (problem: Problem, nextStatus: Status) => {
     try {
-      await api(`/api/problems/${problem._id}`, {
+      const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: nextStatus }),
       });
-      await loadData();
+      upsertProblem(response.problem);
+      if (activeProblem?._id === problem._id) {
+        setActiveProblem(response.problem);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update status");
     }
-  }
+  }, [activeProblem, setError, setActiveProblem, upsertProblem]);
 
-  async function deleteProblem(problemId: string) {
+  const completeRevision = useCallback(async (problem: Problem) => {
+    try {
+      const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/revision`, {
+        method: "POST",
+      });
+      upsertProblem(response.problem);
+      if (activeProblem?._id === problem._id) {
+        setActiveProblem(response.problem);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update revision schedule");
+    }
+  }, [activeProblem, setError, setActiveProblem, upsertProblem]);
+
+  const deleteProblem = useCallback(async (problemId: string) => {
     try {
       await api(`/api/problems/${problemId}`, { method: "DELETE" });
-      await loadData();
+      removeProblem(problemId);
+      if (activeProblem?._id === problemId) {
+        setDrawerOpen(false);
+        setActiveProblem(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete problem");
     }
-  }
+  }, [activeProblem, removeProblem, setDrawerOpen, setActiveProblem, setError]);
+
+  const togglePin = useCallback(async (problem: Problem) => {
+    try {
+      const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isPinned: !problem.isPinned }),
+      });
+      upsertProblem(response.problem);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not toggle pin");
+    }
+  }, [setError, upsertProblem]);
 
   const progress = stats && stats.totalProblems > 0 ? Math.round((stats.solvedProblems / stats.totalProblems) * 100) : 0;
   const visibleProgress =
@@ -752,6 +1292,7 @@ export default function App() {
           className={`topic-card all-topics ${selectedTopic === "all" ? "active" : ""}`}
           onClick={() => {
             setSelectedTopic("all");
+            setStatusFilter("all");
             setMobileSidebarOpen(false);
           }}
         >
@@ -762,32 +1303,62 @@ export default function App() {
           <span className="topic-count">{problems.length}</span>
         </button>
 
+        <button
+          className={`topic-card ${statusFilter === "revisit" ? "active" : ""}`}
+          onClick={() => {
+            setSelectedTopic("all");
+            setStatusFilter("revisit");
+            setMobileSidebarOpen(false);
+          }}
+        >
+          <div className="topic-dot revision-dot" />
+          <div className="topic-copy">
+            <span className="topic-name">Revisit</span>
+            <span className="topic-subtitle">{sidebarRevisionProblems.length} pending</span>
+          </div>
+          <span className="topic-count">{sidebarRevisionProblems.length}</span>
+        </button>
+
         <div className="topic-list">
           {topics.map((topic) => {
             const active = selectedTopic === topic._id;
             const solved = topic.solvedCount ?? 0;
             const total = topic.totalProblems ?? 0;
+            const slug = topic.slug;
+            const subCategories = topicSubCategories[slug] ?? [];
             return (
-              <button
-                key={topic._id}
-                className={`topic-card ${active ? "active" : ""}`}
-                onClick={() => {
-                  setSelectedTopic(topic._id);
-                  setMobileSidebarOpen(false);
-                }}
-              >
-                <div className="topic-dot" style={{ background: topic.accent }} />
-                <div className="topic-copy">
-                  <span className="topic-name">{topic.name}</span>
-                  <span className="topic-subtitle">
-                    {solved}/{total || topic.targetCount} done
-                  </span>
-                </div>
-                <span className="topic-count">{topic.targetCount}</span>
-              </button>
+              <div key={topic._id} className="sidebar-topic-group">
+                <button
+                  className={`topic-card ${active ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedTopic(topic._id);
+                    setStatusFilter("all");
+                    setMobileSidebarOpen(false);
+                  }}
+                >
+                  <div className="topic-dot" style={{ background: topic.accent }} />
+                  <div className="topic-copy">
+                    <span className="topic-name">{topic.name}</span>
+                    <span className="topic-subtitle">
+                      {solved}/{total || topic.targetCount} done
+                    </span>
+                  </div>
+                  <span className="topic-count">{topic.targetCount}</span>
+                </button>
+                {subCategories.length > 0 ? (
+                  <div className="topic-subcategory-list" aria-label={`${topic.name} subtopics`}>
+                    {subCategories.map((sub) => (
+                      <div key={sub.id} className="topic-subcategory-item">
+                        {sub.label}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
+
       </aside>
 
       <main className="content">
@@ -860,6 +1431,79 @@ export default function App() {
           </section>
         ) : null}
 
+        {statusFilter === "revisit" && revisionProblems.length > 0 ? (
+          <section className="revision-panel">
+            <div className="section-heading revision-heading">
+              <div>
+              <p className="panel-label">Spaced repetition</p>
+                <h3>{dueRevisionProblems.length} due now</h3>
+              </div>
+              <span className="section-note">{revisionProblems.length} scheduled for revisit</span>
+            </div>
+
+            <div className="revision-grid">
+              <div className="revision-stack">
+                <p className="revision-stack-label">Due now</p>
+                <div className="revision-list">
+                  {dueRevisionProblems.length > 0 ? (
+                    dueRevisionProblems.map(({ problem, state }) => (
+                      <article key={problem._id} className={`revision-item ${state.isOverdue ? "overdue" : "due"}`}>
+                        <button
+                          className={`revision-check ${state.isComplete ? "checked" : ""}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void completeRevision(problem);
+                          }}
+                          aria-label="Mark revision complete"
+                          title="Mark done"
+                        >
+                          {state.isComplete ? "✓" : ""}
+                        </button>
+                        <div className="revision-item-copy">
+                          <strong>{problem.title}</strong>
+                          <span>{state.subtitle}</span>
+                        </div>
+                        <button className="revision-action" onClick={() => openProblemLink(problem)}>
+                          Revise
+                        </button>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="revision-empty">No revision is due right now.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="revision-stack">
+                <p className="revision-stack-label">Next up</p>
+                <div className="revision-list">
+                  {sidebarRevisionProblems.length > 0 ? (
+                    sidebarRevisionProblems.map(({ problem, state }) => (
+                      <article key={problem._id} className="revision-item upcoming">
+                        <div className="revision-item-copy">
+                          <strong>{problem.title}</strong>
+                          <span>{state.subtitle}</span>
+                        </div>
+                        <button className="revision-action ghost" onClick={() => openEditDrawer(problem)}>
+                          Open
+                        </button>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="revision-empty">No upcoming revisions scheduled.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="revision-summary-strip">
+              <span>{revisionProblems.length} items in revisit queue</span>
+              <span>{dueRevisionProblems.length} due now</span>
+              <span>{sidebarRevisionProblems.length} upcoming</span>
+            </div>
+          </section>
+        ) : null}
+
         <section className="filters">
           <input
             className="search-input"
@@ -868,11 +1512,11 @@ export default function App() {
             onChange={(event) => setSearch(event.target.value)}
           />
 
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Status | "all" | "revision")}>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Status | "all" | "revisit")}>
             <option value="all">All status</option>
             <option value="unsolved">Unsolved</option>
             <option value="solved">Solved</option>
-            <option value="revision">Revision</option>
+            <option value="revisit">Revisit</option>
           </select>
 
           <select
@@ -921,241 +1565,69 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {groupedByTopicAndSection.map((group) => {
-                    const solvedCount = group.sections.reduce(
-                      (acc, sec) => acc + sec.problems.filter(p => p.problem.status === "solved").length,
-                      0
-                    );
-                    const totalCount = group.sections.reduce((acc, sec) => acc + sec.problems.length, 0);
-                    const isTopicExpanded = expandedTopics.has(group.topicId);
+                  {selectedTopic === "all"
+                    ? groupedByTopicAndSection.map((group) => (
+                        <Fragment key={group.topicId}>
+                          <tr
+                            className="table-topic-header-row"
+                            onClick={() => toggleTopicExpanded(group.topicId)}
+                            style={{ cursor: "pointer" }}
+                          >
+                            <td colSpan={editMode ? 10 : 9} className="table-topic-header-cell">
+                              <div className="topic-header-content">
+                                <span className="expand-arrow" style={{ color: group.accent }}>
+                                  {expandedTopics.has(group.topicId) ? "▼" : "▶"}
+                                </span>
+                                <span className="topic-name">{group.topicName}</span>
+                                <span className="topic-stats-badge">
+                                  {group.solvedCount} / {group.totalCount} Solved
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
 
-                    return (
-                      <Fragment key={group.topicId}>
-                        <tr
-                          className="table-topic-header-row"
-                          onClick={() => toggleTopicExpanded(group.topicId)}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <td colSpan={editMode ? 10 : 9} className="table-topic-header-cell">
-                            <div className="topic-header-content">
-                              <span className="expand-arrow" style={{ color: group.accent }}>{isTopicExpanded ? "▼" : "▶"}</span>
-                              <span className="topic-name">{group.topicName}</span>
-                              <span className="topic-stats-badge">
-                                {solvedCount} / {totalCount} Solved
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-
-                        {isTopicExpanded && group.sections.map((sectionGroup) => {
-                          const isSectionExpanded = expandedSections.has(sectionGroup.sectionKey);
-                          const secSolved = sectionGroup.problems.filter(p => p.problem.status === "solved").length;
-                          const secTotal = sectionGroup.problems.length;
-                          // If there's no specific module or if it's named "General" or blank, maybe we don't show the nested header?
-                          // Wait, the prompt says: "first group problems by primary Topic, and then group problems within those topics by sub-section/module".
-                          // If a problem does not have a module, we fallback to "General" or similar, or we can just always render the module header.
-                          // Wait, let's always show it, or only if there's multiple modules or section name is not blank. Let's make it look premium.
-                          // If there's a section, let's show the header. To make it extremely consistent, we show the sub-section header!
-                          // Let's do that!
-                          const showSectionHeader = true;
-
-                          return (
-                            <Fragment key={sectionGroup.sectionKey}>
-                              {showSectionHeader && (
-                                <tr
-                                  className="table-section-header-row"
-                                  onClick={() => toggleSectionExpanded(sectionGroup.sectionKey)}
-                                  style={{ cursor: "pointer" }}
-                                >
-                                  <td colSpan={editMode ? 10 : 9} className="table-section-header-cell">
-                                    <div className="section-header-content">
-                                      <span className="expand-arrow-sub" style={{ color: group.accent }}>
-                                        {isSectionExpanded ? "▼" : "▶"}
-                                      </span>
-                                      <span className="section-name">{sectionGroup.sectionName}</span>
-                                      <span className="section-stats-badge">
-                                        {secSolved} / {secTotal} Solved
-                                      </span>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-
-                              {isSectionExpanded && sectionGroup.problems.map(({ problem, displayIndex }) => {
-                                const hasNote = !!(problem.shortNote || problem.longNote);
-                                return (
-                                  <tr key={problem._id} className="table-problem-row">
-                                    <td className="status-col">
-                                      <div className="status-cell-content">
-                                        <span className="row-index-num">{displayIndex}</span>
-                                        <button
-                                          className={`status-checkbox ${problem.status === "solved" ? "checked" : ""}`}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            const newStatus = problem.status === "solved" ? "unsolved" : "solved";
-                                            void updateStatus(problem, newStatus);
-                                          }}
-                                          aria-label="Toggle status"
-                                        >
-                                          {problem.status === "solved" ? (
-                                            <span className="checkbox-inner-dot" />
-                                          ) : null}
-                                        </button>
-                                      </div>
-                                    </td>
-                                    <td className="problem-title-col" onClick={() => openEditDrawer(problem)}>
-                                      <div className="problem-title-wrapper">
-                                        <span className="problem-title-text">{problem.title}</span>
-                                        {problem.pattern ? <span className="pattern-chip">{problem.pattern}</span> : null}
-                                      </div>
-                                    </td>
-                                    <td className="importance-col">
-                                      {problem.rating ? (
-                                        <span className="importance-rating-badge">{formatRating(problem.rating)}</span>
-                                      ) : (
-                                        <span className="importance-rating-empty">-</span>
-                                      )}
-                                    </td>
-                                    <td className="practice-col">
-                                      <a
-                                        href={problem.platformUrl}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="practice-platform-link"
-                                        onClick={(event) => event.stopPropagation()}
-                                        title={`Practice on ${problem.platformName}`}
-                                      >
-                                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="practice-icon">
-                                          <polyline points="16 18 22 12 16 6"></polyline>
-                                          <polyline points="8 6 2 12 8 18"></polyline>
-                                        </svg>
-                                      </a>
-                                    </td>
-                                    <td className="note-col">
-                                      <button
-                                        className={`table-note-btn ${hasNote ? "has-note" : ""}`}
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          openEditDrawer(problem);
-                                        }}
-                                        title="Edit Note"
-                                      >
-                                        {hasNote ? (
-                                          <svg viewBox="0 0 24 24" width="18" height="18" stroke="#22c55e" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                            <polyline points="14 2 14 8 20 8"></polyline>
-                                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                                          </svg>
-                                        ) : (
-                                          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                                            <circle cx="12" cy="12" r="10"></circle>
-                                            <line x1="12" y1="8" x2="12" y2="16"></line>
-                                            <line x1="8" y1="12" x2="16" y2="12"></line>
-                                          </svg>
-                                        )}
-                                      </button>
-                                    </td>
-                                    <td className="revision-col">
-                                      <button
-                                        className={`table-star-btn ${problem.isPinned ? "active" : ""}`}
-                                        onClick={async (event) => {
-                                          event.stopPropagation();
-                                          try {
-                                            const newPinned = !problem.isPinned;
-                                            await api(`/api/problems/${problem._id}`, {
-                                              method: "PATCH",
-                                              body: JSON.stringify({ isPinned: newPinned }),
-                                            });
-                                            await loadData();
-                                          } catch (err) {
-                                            setError(err instanceof Error ? err.message : "Could not toggle pin");
-                                          }
-                                        }}
-                                        title="Toggle Revision"
-                                      >
-                                        <svg
-                                          viewBox="0 0 24 24"
-                                          width="20"
-                                          height="20"
-                                          stroke="currentColor"
-                                          strokeWidth="2"
-                                          fill={problem.isPinned ? "#eab308" : "none"}
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                        >
-                                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                                        </svg>
-                                      </button>
-                                    </td>
-                                    <td className="difficulty-col">
-                                      <span className={`difficulty-pill difficulty-${problem.difficulty.toLowerCase()}`}>
-                                        {problem.difficulty}
-                                      </span>
-                                    </td>
-                                    <td className="focus-col">
-                                      <div className="focus-badges">
-                                        {getProblemCategories(problem).map((cat) => {
-                                          let emoji = "";
-                                          if (cat === "Must Do") emoji = "⭐";
-                                          else if (cat === "FAANG Favorite") emoji = "🔥";
-                                          else if (cat === "Service Company Favorite") emoji = "🟢";
-                                          else if (cat === "Hidden Gem") emoji = "💎";
-                                          else if (cat === "Revision Question") emoji = "🚀";
-                                          else if (cat === "Pattern Builder") emoji = "🧠";
-
-                                          if (!emoji) return null;
-                                          return (
-                                            <span key={cat} className="focus-badge-icon" title={cat}>
-                                              {emoji}
-                                            </span>
-                                          );
-                                        })}
-                                      </div>
-                                    </td>
-                                    <td className="meaning-col">
-                                      <div className="meaning-badges">
-                                        {getProblemCategories(problem).map((cat) => {
-                                          let className = "";
-                                          if (cat === "Must Do") className = "badge-must-do";
-                                          else if (cat === "FAANG Favorite") className = "badge-faang";
-                                          else if (cat === "Service Company Favorite") className = "badge-service";
-                                          else if (cat === "Hidden Gem") className = "badge-gem";
-                                          else if (cat === "Revision Question") className = "badge-revision";
-                                          else if (cat === "Pattern Builder") className = "badge-pattern";
-
-                                          return (
-                                            <span key={cat} className={`meaning-badge ${className}`}>
-                                              {cat}
-                                            </span>
-                                          );
-                                        })}
-                                      </div>
-                                    </td>
-                                    {editMode ? (
-                                      <td className="delete-col">
-                                        <button
-                                          className="table-delete-btn"
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            if (window.confirm("Are you sure you want to delete this problem?")) {
-                                              void deleteProblem(problem._id);
-                                            }
-                                          }}
-                                        >
-                                          Delete
-                                        </button>
-                                      </td>
-                                    ) : null}
-                                  </tr>
-                                );
-                              })}
-                            </Fragment>
-                          );
-                        })}
-                      </Fragment>
-                    );
-                  })}
+                          {expandedTopics.has(group.topicId)
+                            ? group.sections.map((sectionGroup) => (
+                                <SectionBlock
+                                  key={sectionGroup.sectionKey}
+                                  group={sectionGroup}
+                                  accent={group.accent}
+                                  canEdit={editMode}
+                                  revisionStateMap={revisionStateMap}
+                                  problemCategoryMap={problemCategoryMap}
+                              nowDate={nowDate}
+                              onToggleStatus={updateStatus}
+                                  onOpenEdit={openEditDrawer}
+                                  onTogglePin={togglePin}
+                                  onOpenLink={openProblemLink}
+                                  onDelete={deleteProblem}
+                                  rowLimit={sectionRowLimit}
+                                  onLoadMore={() => setSectionRowLimit((value) => value + 30)}
+                                />
+                              ))
+                            : null}
+                        </Fragment>
+                      ))
+                    : groupedByTopicAndSection.flatMap((group) =>
+                        group.sections.map((sectionGroup) => (
+                          <SectionBlock
+                            key={sectionGroup.sectionKey}
+                            group={sectionGroup}
+                            accent={group.accent}
+                            canEdit={editMode}
+                            revisionStateMap={revisionStateMap}
+                            problemCategoryMap={problemCategoryMap}
+                            nowDate={nowDate}
+                              onToggleStatus={updateStatus}
+                            onOpenEdit={openEditDrawer}
+                            onTogglePin={togglePin}
+                            onOpenLink={openProblemLink}
+                            onDelete={deleteProblem}
+                            rowLimit={sectionRowLimit}
+                            onLoadMore={() => setSectionRowLimit((value) => value + 30)}
+                          />
+                        ))
+                      )}
                 </tbody>
               </table>
             </div>
@@ -1187,6 +1659,23 @@ export default function App() {
             {drawerMode === "edit" ? (
               <>
                 <div className="drawer-body">
+                  {activeProblem && activeRevisionState ? (
+                    <div className={`revision-summary ${activeRevisionState.isOverdue ? "overdue" : activeRevisionState.isDue ? "due" : ""}`}>
+                      <div>
+                        <p className="panel-label">Spaced repetition</p>
+                        <strong>{activeRevisionState.label || "Scheduled"}</strong>
+                        <span>{activeRevisionState.subtitle}</span>
+                      </div>
+                      {!activeRevisionState.isComplete ? (
+                        <button className="revision-inline-action" onClick={() => openProblemLink(activeProblem)}>
+                          Open
+                        </button>
+                      ) : (
+                        <span className="revision-complete-pill">Completed</span>
+                      )}
+                    </div>
+                  ) : null}
+
                   <label>
                     Title
                     <input

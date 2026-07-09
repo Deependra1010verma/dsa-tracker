@@ -11,6 +11,7 @@ const app = express();
 const port = Number(process.env.PORT || 4000);
 const mongoUri = process.env.MONGODB_URI || "";
 const clientDist = path.resolve(process.cwd(), "dist/web");
+const spacedRevisionDays = [1, 3, 7, 15, 30] as const;
 
 app.use(express.json({ limit: "2mb" }));
 
@@ -36,14 +37,77 @@ function problemKeyForSeed(topicSlug: string, title: string) {
   return `${slugifySegment(topicSlug)}:${slugifySegment(title)}`;
 }
 
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function coerceDate(value: unknown) {
+  if (value instanceof Date) {
+    return value;
+  }
+
+  const date = new Date(value as never);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function baseRevisionAnchor(problem: {
+  solvedAt?: unknown;
+  revisitAt?: unknown;
+  lastRevisionAt?: unknown;
+  updatedAt?: unknown;
+}) {
+  return coerceDate(problem.lastRevisionAt ?? problem.revisitAt ?? problem.solvedAt ?? problem.updatedAt ?? new Date());
+}
+
+function startRevisionSchedule(problem: any, anchorOverride?: Date) {
+  const anchor = anchorOverride ?? baseRevisionAnchor(problem);
+  problem.revisionStage = 0;
+  problem.lastRevisionAt = anchor;
+  problem.nextRevisionAt = addDays(anchor, spacedRevisionDays[0]);
+  problem.revisionCompletedAt = undefined;
+  problem.revisionCount = Math.max(problem.revisionCount ?? 0, 0);
+}
+
+function advanceRevisionSchedule(problem: any) {
+  const currentStage = Math.max(problem.revisionStage ?? 0, 0);
+  const nextStage = Math.min(currentStage + 1, spacedRevisionDays.length);
+  const now = new Date();
+
+  problem.revisionCount = (problem.revisionCount ?? 0) + 1;
+  problem.lastRevisionAt = now;
+
+  if (nextStage >= spacedRevisionDays.length) {
+    problem.revisionStage = spacedRevisionDays.length;
+    problem.nextRevisionAt = undefined;
+    problem.revisionCompletedAt = now;
+    return;
+  }
+
+  problem.revisionStage = nextStage;
+  problem.nextRevisionAt = addDays(now, spacedRevisionDays[nextStage]);
+  problem.revisionCompletedAt = undefined;
+}
+
+function clearRevisionSchedule(problem: any) {
+  problem.revisionStage = 0;
+  problem.lastRevisionAt = undefined;
+  problem.nextRevisionAt = undefined;
+  problem.revisionCompletedAt = undefined;
+}
+
 function seededProblemScore(problem: {
   status?: string;
   shortNote?: string;
   longNote?: string;
   revisionCount?: number;
+  revisionStage?: number;
   tags?: string[];
   solvedAt?: Date | null;
   revisitAt?: Date | null;
+  lastRevisionAt?: Date | null;
+  nextRevisionAt?: Date | null;
   updatedAt?: Date | null;
 }) {
   return [
@@ -52,8 +116,11 @@ function seededProblemScore(problem: {
     problem.longNote ? 4 : 0,
     (problem.tags?.length ?? 0) > 0 ? 2 : 0,
     Math.min(problem.revisionCount ?? 0, 10),
+    Math.min(problem.revisionStage ?? 0, 6),
     problem.solvedAt ? 3 : 0,
     problem.revisitAt ? 2 : 0,
+    problem.lastRevisionAt ? 2 : 0,
+    problem.nextRevisionAt ? 2 : 0,
     problem.updatedAt ? problem.updatedAt.getTime() / 1_000_000_000_000 : 0,
   ].reduce((sum, value) => sum + value, 0);
 }
@@ -198,8 +265,12 @@ async function ensureSeedProblems() {
           priority: seed.priority,
           isPinned: seed.isPinned,
           revisionCount: seed.revisionCount ?? 0,
+          revisionStage: seed.status === "solved" || seed.status === "revisit" ? 0 : 0,
           solvedAt: seed.status === "solved" ? new Date() : undefined,
           revisitAt: seed.status === "revisit" ? new Date() : undefined,
+          lastRevisionAt: seed.status === "solved" || seed.status === "revisit" ? new Date() : undefined,
+          nextRevisionAt:
+            seed.status === "solved" || seed.status === "revisit" ? addDays(new Date(), spacedRevisionDays[0]) : undefined,
         },
       },
       upsert: true,
@@ -222,50 +293,51 @@ function statusFromValue(value: unknown): ProblemStatus | "" {
     : "";
 }
 
+async function backfillRevisionSchedules() {
+  const problems = await Problem.find({
+    status: { $in: ["solved", "revisit"] },
+    $or: [{ nextRevisionAt: { $exists: false } }, { nextRevisionAt: null }],
+  });
+
+  for (const problem of problems) {
+    startRevisionSchedule(problem);
+    await problem.save();
+  }
+}
+
 app.get(
   "/api/topics",
   asyncHandler(async (_req, res) => {
-    const topics = await Topic.aggregate([
-      { $sort: { order: 1 } },
-      {
-        $lookup: {
-          from: "problems",
-          localField: "_id",
-          foreignField: "topic",
-          as: "problems",
-        },
-      },
-      {
-        $addFields: {
-          totalProblems: { $size: "$problems" },
-          solvedCount: {
-            $size: {
-              $filter: {
-                input: "$problems",
-                as: "problem",
-                cond: { $eq: ["$$problem.status", "solved"] },
-              },
+    const [topics, counts] = await Promise.all([
+      Topic.find().sort({ order: 1 }).lean(),
+      Problem.aggregate([
+        {
+          $group: {
+            _id: "$topic",
+            totalProblems: { $sum: 1 },
+            solvedCount: {
+              $sum: { $cond: [{ $eq: ["$status", "solved"] }, 1, 0] },
             },
-          },
-          revisitCount: {
-            $size: {
-              $filter: {
-                input: "$problems",
-                as: "problem",
-                cond: { $eq: ["$$problem.status", "revisit"] },
-              },
+            revisitCount: {
+              $sum: { $cond: [{ $eq: ["$status", "revisit"] }, 1, 0] },
             },
           },
         },
-      },
-      {
-        $project: {
-          problems: 0,
-        },
-      },
+      ]),
     ]);
 
-    res.json({ topics });
+    const countMap = new Map(counts.map((entry) => [String(entry._id), entry]));
+    const topicsWithCounts = topics.map((topic) => {
+      const countsForTopic = countMap.get(String(topic._id));
+      return {
+        ...topic,
+        totalProblems: countsForTopic?.totalProblems ?? 0,
+        solvedCount: countsForTopic?.solvedCount ?? 0,
+        revisitCount: countsForTopic?.revisitCount ?? 0,
+      };
+    });
+
+    res.json({ topics: topicsWithCounts });
   })
 );
 
@@ -276,6 +348,7 @@ app.get(
     const search = normalizeSearch(req.query.search);
     const difficulty = normalizeSearch(req.query.difficulty);
     const status = statusFromValue(req.query.status);
+    const brief = normalizeSearch(req.query.brief) === "1";
 
     const filter: Record<string, unknown> = {};
     if (topic) {
@@ -298,11 +371,36 @@ app.get(
       ];
     }
 
-    const problems = await Problem.find(filter)
-      .populate("topic")
+    const query = Problem.find(filter)
+      .populate("topic", "name slug order targetCount description accent")
       .sort({ roadmapSectionOrder: 1, roadmapOrder: 1, isPinned: -1, priority: -1, updatedAt: -1 });
 
+    if (brief) {
+      query.select(
+        "title topic platformName platformUrl roadmapSection roadmapSectionOrder roadmapOrder difficulty status shortNote pattern rating revisionCount revisionStage solvedAt revisitAt lastRevisionAt nextRevisionAt revisionCompletedAt tags priority isPinned updatedAt"
+      );
+    }
+
+    const problems = await query.lean();
+
     res.json({ problems });
+  })
+);
+
+app.get(
+  "/api/problems/:id",
+  asyncHandler(async (req, res) => {
+    const problem = await Problem.findById(req.params.id).populate(
+      "topic",
+      "name slug order targetCount description accent"
+    );
+
+    if (!problem) {
+      res.status(404).json({ message: "Problem not found" });
+      return;
+    }
+
+    res.json({ problem });
   })
 );
 
@@ -350,6 +448,11 @@ app.post(
       isPinned = false,
     } = req.body ?? {};
 
+    const now = new Date();
+    const isSolvedLike = status === "solved" || status === "revisit";
+    const solvedAt = status === "solved" ? now : undefined;
+    const revisitAt = status === "revisit" ? now : undefined;
+
     const created = await Problem.create({
       title,
       topic: topicId,
@@ -365,8 +468,12 @@ app.post(
       tags,
       priority,
       isPinned,
-      solvedAt: status === "solved" ? new Date() : undefined,
-      revisitAt: status === "revisit" ? new Date() : undefined,
+      revisionCount: isSolvedLike ? 1 : 0,
+      revisionStage: isSolvedLike ? 0 : 0,
+      solvedAt,
+      revisitAt,
+      lastRevisionAt: isSolvedLike ? now : undefined,
+      nextRevisionAt: isSolvedLike ? addDays(now, spacedRevisionDays[0]) : undefined,
     });
 
     const populated = await created.populate("topic");
@@ -385,6 +492,7 @@ app.patch(
 
     const next = req.body ?? {};
     const previousStatus = problem.status;
+    const now = new Date();
     Object.assign(problem, {
       title: next.title ?? problem.title,
       topic: next.topicId ?? problem.topic,
@@ -402,12 +510,53 @@ app.patch(
       isPinned: typeof next.isPinned === "boolean" ? next.isPinned : problem.isPinned,
     });
 
+    const statusChangedToSolved = problem.status === "solved" && previousStatus !== "solved";
+    const statusChangedToRevisit = problem.status === "revisit" && previousStatus !== "revisit";
+    const statusChangedToUnsolved = problem.status === "unsolved" && previousStatus !== "unsolved";
+
+    if (statusChangedToUnsolved) {
+      clearRevisionSchedule(problem);
+    } else if (statusChangedToSolved || statusChangedToRevisit) {
+      startRevisionSchedule(problem, now);
+    } else if (
+      (problem.status === "solved" || problem.status === "revisit") &&
+      !problem.nextRevisionAt &&
+      !problem.revisionCompletedAt
+    ) {
+      startRevisionSchedule(problem, now);
+    }
+
     if (problem.status === "solved" && previousStatus !== "solved") {
-      problem.solvedAt = new Date();
+      problem.solvedAt = now;
     }
     if (problem.status === "revisit" && previousStatus !== "revisit") {
-      problem.revisitAt = new Date();
-      problem.revisionCount += 1;
+      problem.revisitAt = now;
+    }
+
+    await problem.save();
+    const populated = await problem.populate("topic");
+    res.json({ problem: populated });
+  })
+);
+
+app.post(
+  "/api/problems/:id/revision",
+  asyncHandler(async (req, res) => {
+    const problem = await Problem.findById(req.params.id);
+    if (!problem) {
+      res.status(404).json({ message: "Problem not found" });
+      return;
+    }
+
+    if (problem.status === "unsolved") {
+      problem.status = "solved";
+      problem.solvedAt = problem.solvedAt ?? new Date();
+    }
+
+    if (!problem.nextRevisionAt) {
+      startRevisionSchedule(problem);
+    } else {
+      advanceRevisionSchedule(problem);
     }
 
     await problem.save();
@@ -456,12 +605,14 @@ app.use(
 await connectDb(mongoUri);
 await ensureSeedTopics();
 await ensureSeedProblems();
+await backfillRevisionSchedules();
 
-app.listen(port, () => {
-  console.log(`API running on port ${port}`);
-});
+if (process.env.NODE_ENV !== "production") {
+  app.listen(port, () => {
+    console.log(`API running on port ${port}`);
+  });
+}
 
 export default app;
 
 // Serverless deployment – no explicit listen required
-
