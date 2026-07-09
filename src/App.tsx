@@ -843,20 +843,22 @@ export default function App() {
 
   const sortedFilteredProblems = useMemo(() => {
     return [...filteredProblems].sort((left, right) => {
-      const leftRevision = revisionStateMap.get(left._id) ?? getRevisionState(left, nowDate);
-      const rightRevision = revisionStateMap.get(right._id) ?? getRevisionState(right, nowDate);
+      if (statusFilter === "revisit") {
+        const leftRevision = revisionStateMap.get(left._id) ?? getRevisionState(left, nowDate);
+        const rightRevision = revisionStateMap.get(right._id) ?? getRevisionState(right, nowDate);
 
-      const leftRevisionScore = leftRevision.isOverdue ? 3 : leftRevision.isDue ? 2 : leftRevision.isScheduled ? 1 : 0;
-      const rightRevisionScore = rightRevision.isOverdue ? 3 : rightRevision.isDue ? 2 : rightRevision.isScheduled ? 1 : 0;
-      const revisionScoreDelta = rightRevisionScore - leftRevisionScore;
-      if (revisionScoreDelta !== 0) {
-        return revisionScoreDelta;
-      }
+        const leftRevisionScore = leftRevision.isOverdue ? 3 : leftRevision.isDue ? 2 : leftRevision.isScheduled ? 1 : 0;
+        const rightRevisionScore = rightRevision.isOverdue ? 3 : rightRevision.isDue ? 2 : rightRevision.isScheduled ? 1 : 0;
+        const revisionScoreDelta = rightRevisionScore - leftRevisionScore;
+        if (revisionScoreDelta !== 0) {
+          return revisionScoreDelta;
+        }
 
-      const leftDue = leftRevision.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
-      const rightDue = rightRevision.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
-      if (leftDue !== rightDue) {
-        return leftDue - rightDue;
+        const leftDue = leftRevision.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+        const rightDue = rightRevision.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
+        if (leftDue !== rightDue) {
+          return leftDue - rightDue;
+        }
       }
 
       if (selectedTopic === "all") {
@@ -883,7 +885,7 @@ export default function App() {
 
       return left.title.localeCompare(right.title);
     });
-  }, [filteredProblems, nowDate, revisionStateMap, selectedTopic]);
+  }, [filteredProblems, nowDate, revisionStateMap, selectedTopic, statusFilter]);
 
   const groupedByTopicAndSection = useMemo(() => {
     const topicGroups: Array<{
