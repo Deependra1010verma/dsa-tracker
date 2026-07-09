@@ -1,14 +1,13 @@
 {
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1.js" }
-  ],
-  "functions": {
-    "api/**/*.js": {
-      "runtime": "nodejs18.x"
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/web/$1"
     }
-  },
-  "routes": [
-    { "src": "/(.*)", "dest": "/web/$1" }
   ]
 }

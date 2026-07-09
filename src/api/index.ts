@@ -457,12 +457,5 @@ await connectDb(mongoUri);
 await ensureSeedTopics();
 await ensureSeedProblems();
 
-if (process.env.VERCEL) {
-  // In Vercel environment, the serverless platform will invoke the exported handler.
-} else {
-  const host = process.env.NODE_ENV === "production" || process.env.PORT ? "0.0.0.0" : "127.0.0.1";
-  app.listen(port, host, () => {
-    console.log(`DSA Tracker API running on http://${host}:${port}`);
-  });
-}
+// Serverless deployment – no explicit listen required
 export default app;
