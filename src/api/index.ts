@@ -84,7 +84,6 @@ async function ensureSeedTopics() {
 }
 
 async function ensureSeedProblems() {
-  console.log("Entered ensureSeedProblems");
   const topics = await Topic.find({ slug: { $in: problemSeeds.map((seed) => seed.topicSlug) } });
   const topicsBySlug = new Map(topics.map((topic) => [topic.slug, topic._id]));
   const topicIds = topics.map((topic) => topic._id);
@@ -215,8 +214,6 @@ async function ensureSeedProblems() {
     isSeeded: true,
     problemKey: { $nin: seededKeys },
   });
-  console.log("Leaving ensureSeedProblems");
-
 }
 
 function statusFromValue(value: unknown): ProblemStatus | "" {
@@ -460,5 +457,11 @@ await connectDb(mongoUri);
 await ensureSeedTopics();
 await ensureSeedProblems();
 
-// Serverless deployment – no explicit listen required
+app.listen(port, () => {
+  console.log(`API running on port ${port}`);
+});
+
 export default app;
+
+// Serverless deployment – no explicit listen required
+
