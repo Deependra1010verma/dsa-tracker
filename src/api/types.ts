@@ -22,9 +22,17 @@ export type ProblemSeed = {
   difficulty: Difficulty;
   status: ProblemStatus;
   pattern?: string;
+  invariant?: string;
   rating?: number;
   shortNote: string;
   longNote: string;
+  mistakeLog?: string;
+  mistakeTrigger?: string;
+  mistakeReason?: string;
+  mistakeFix?: string;
+  compareBruteForce?: string;
+  compareOptimized?: string;
+  compareWhyBetter?: string;
   tags: string[];
   priority: number;
   isPinned: boolean;

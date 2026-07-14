@@ -1142,6 +1142,142 @@ textarea {
   margin-top: 18px;
 }
 
+.mistake-log-block {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(125, 211, 252, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mistake-log-block .panel-label {
+  margin: 0;
+}
+
+.recall-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(34, 197, 94, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.1), transparent 30%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.recall-panel .section-heading {
+  align-items: center;
+}
+
+.recall-toggle {
+  white-space: nowrap;
+}
+
+.recall-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.recall-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(6, 10, 20, 0.5);
+}
+
+.recall-card strong {
+  font-size: 0.92rem;
+}
+
+.recall-card span {
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+
+.pattern-invariant-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(125, 211, 252, 0.12);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(125, 211, 252, 0.08), transparent 28%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.pattern-invariant-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pattern-invariant-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(6, 10, 20, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pattern-invariant-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pattern-invariant-grid strong {
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.compare-approaches-block,
+.compare-approaches-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(168, 85, 247, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(168, 85, 247, 0.08), transparent 30%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.compare-approaches-card {
+  margin-top: 2px;
+}
+
+.compare-approaches-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.compare-approaches-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(6, 10, 20, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.compare-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.compare-approaches-grid strong {
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
 .drawer-body.notes-body {
   gap: 12px;
 }

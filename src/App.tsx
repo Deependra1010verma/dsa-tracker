@@ -28,9 +28,17 @@ type Problem = {
   difficulty: Difficulty;
   status: Status;
   pattern?: string;
+  invariant?: string;
+  compareBruteForce?: string;
+  compareOptimized?: string;
+  compareWhyBetter?: string;
   rating?: number;
   shortNote: string;
   longNote?: string;
+  mistakeLog?: string;
+  mistakeTrigger?: string;
+  mistakeReason?: string;
+  mistakeFix?: string;
   revisionCount: number;
   revisionStage?: number;
   solvedAt?: string;
@@ -62,9 +70,17 @@ type ProblemFormState = {
   difficulty: Difficulty;
   status: Status;
   pattern: string;
+  invariant: string;
+  compareBruteForce: string;
+  compareOptimized: string;
+  compareWhyBetter: string;
   rating: number;
   shortNote: string;
   longNote: string;
+  mistakeLog: string;
+  mistakeTrigger: string;
+  mistakeReason: string;
+  mistakeFix: string;
   tags: string;
   priority: number;
   isPinned: boolean;
@@ -79,9 +95,17 @@ const emptyForm: ProblemFormState = {
   difficulty: "Easy",
   status: "unsolved",
   pattern: "",
+  invariant: "",
+  compareBruteForce: "",
+  compareOptimized: "",
+  compareWhyBetter: "",
   rating: 0,
   shortNote: "",
   longNote: "",
+  mistakeLog: "",
+  mistakeTrigger: "",
+  mistakeReason: "",
+  mistakeFix: "",
   tags: "",
   priority: 0,
   isPinned: false,
@@ -151,6 +175,69 @@ type SectionBlockProps = {
 
 function formatRating(rating?: number) {
   return typeof rating === "number" && rating > 0 ? `${rating}/10` : "";
+}
+
+function composeMistakeLog(trigger: string, reason: string, fix: string) {
+  return [trigger.trim(), reason.trim(), fix.trim()].filter(Boolean).join("\n\n");
+}
+
+function splitMistakeLog(value?: string | null) {
+  const parts = (value ?? "")
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    trigger: parts[0] ?? "",
+    reason: parts[1] ?? "",
+    fix: parts[2] ?? "",
+  };
+}
+
+type RecallPrompt = {
+  question: string;
+  hint: string;
+};
+
+function buildRecallPrompts(problem: Problem): RecallPrompt[] {
+  const tagSummary = problem.tags.length > 0 ? problem.tags.slice(0, 3).join(", ") : "look for the smallest useful state";
+  const patternHint = problem.pattern?.trim() || problem.topic?.name || "infer the pattern from the constraints";
+  const invariantHint = problem.invariant?.trim() || "state what must stay true after each step";
+  const compareHint =
+    problem.compareWhyBetter?.trim() ||
+    problem.compareOptimized?.trim() ||
+    "focus on what the optimized version removes or improves";
+  const mistakeHint =
+    splitMistakeLog(problem.mistakeLog).fix ||
+    problem.mistakeFix ||
+    "name the edge case that breaks your first approach";
+
+  return [
+    {
+      question: "What pattern should you reach for first?",
+      hint: patternHint,
+    },
+    {
+      question: "What invariant must remain true?",
+      hint: invariantHint,
+    },
+    {
+      question: "Why is the optimized approach better than brute force?",
+      hint: compareHint,
+    },
+    {
+      question: "What state or data structure actually changes while solving?",
+      hint: tagSummary,
+    },
+    {
+      question: "Which edge case or mistake has hurt you before?",
+      hint: mistakeHint,
+    },
+    {
+      question: "How would you explain the optimized idea in one sentence?",
+      hint: problem.shortNote || "keep it short and focus on the core transition",
+    },
+  ];
 }
 
 function toValidDate(value?: string | null) {
@@ -379,7 +466,14 @@ const ProblemRow = memo(function ProblemRow({
   onOpenLink,
   onDelete,
 }: ProblemRowProps) {
-  const hasNote = Boolean(problem.shortNote || problem.longNote);
+  const hasNote = Boolean(
+    problem.shortNote ||
+      problem.longNote ||
+      problem.mistakeLog ||
+      problem.mistakeTrigger ||
+      problem.mistakeReason ||
+      problem.mistakeFix
+  );
 
   return (
     <tr className="table-problem-row">
@@ -1021,9 +1115,17 @@ export default function App() {
       difficulty: problem.difficulty,
       status: problem.status,
       pattern: problem.pattern ?? "",
+      invariant: problem.invariant ?? "",
+      compareBruteForce: problem.compareBruteForce ?? "",
+      compareOptimized: problem.compareOptimized ?? "",
+      compareWhyBetter: problem.compareWhyBetter ?? "",
       rating: problem.rating ?? 0,
       shortNote: problem.shortNote,
       longNote: problem.longNote,
+      mistakeLog: problem.mistakeLog ?? composeMistakeLog(problem.mistakeTrigger ?? "", problem.mistakeReason ?? "", problem.mistakeFix ?? ""),
+      mistakeTrigger: problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger,
+      mistakeReason: problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason,
+      mistakeFix: problem.mistakeFix ?? splitMistakeLog(problem.mistakeLog).fix,
       tags: problem.tags.join(", "),
       priority: problem.priority,
       isPinned: problem.isPinned,
@@ -1040,9 +1142,17 @@ export default function App() {
         difficulty: nextProblem.difficulty,
         status: nextProblem.status,
         pattern: nextProblem.pattern ?? "",
+        invariant: nextProblem.invariant ?? "",
+        compareBruteForce: nextProblem.compareBruteForce ?? "",
+        compareOptimized: nextProblem.compareOptimized ?? "",
+        compareWhyBetter: nextProblem.compareWhyBetter ?? "",
         rating: nextProblem.rating ?? 0,
         shortNote: nextProblem.shortNote,
         longNote: nextProblem.longNote ?? "",
+        mistakeLog: nextProblem.mistakeLog ?? composeMistakeLog(nextProblem.mistakeTrigger ?? "", nextProblem.mistakeReason ?? "", nextProblem.mistakeFix ?? ""),
+        mistakeTrigger: nextProblem.mistakeTrigger ?? splitMistakeLog(nextProblem.mistakeLog).trigger,
+        mistakeReason: nextProblem.mistakeReason ?? splitMistakeLog(nextProblem.mistakeLog).reason,
+        mistakeFix: nextProblem.mistakeFix ?? splitMistakeLog(nextProblem.mistakeLog).fix,
         tags: nextProblem.tags.join(", "),
         priority: nextProblem.priority,
         isPinned: nextProblem.isPinned,
@@ -1087,9 +1197,17 @@ export default function App() {
         difficulty: form.difficulty,
         status: form.status,
         pattern: form.pattern.trim(),
+        invariant: form.invariant.trim(),
+        compareBruteForce: form.compareBruteForce.trim(),
+        compareOptimized: form.compareOptimized.trim(),
+        compareWhyBetter: form.compareWhyBetter.trim(),
         rating: form.rating,
         shortNote: form.shortNote.trim(),
         longNote: form.longNote.trim(),
+        mistakeTrigger: form.mistakeTrigger.trim(),
+        mistakeReason: form.mistakeReason.trim(),
+        mistakeFix: form.mistakeFix.trim(),
+        mistakeLog: composeMistakeLog(form.mistakeTrigger, form.mistakeReason, form.mistakeFix),
         tags: form.tags
           .split(",")
           .map((tag) => tag.trim())
@@ -1747,18 +1865,66 @@ export default function App() {
                     </label>
 
                     <label>
-                      Rating
+                      Invariant
                       <input
-                        type="number"
-                        min={0}
-                        max={10}
-                        value={form.rating}
-                        onChange={(event) =>
-                          setForm({ ...form, rating: Number(event.target.value) || 0 })
-                        }
+                        value={form.invariant}
+                        onChange={(event) => setForm({ ...form, invariant: event.target.value })}
+                        placeholder="What must always stay true"
                       />
                     </label>
                   </div>
+
+                  <div className="compare-approaches-block">
+                    <p className="panel-label">Compare approaches</p>
+                    <label>
+                      Brute force
+                      <textarea
+                        rows={3}
+                        value={form.compareBruteForce}
+                        onChange={(event) =>
+                          setForm({ ...form, compareBruteForce: event.target.value })
+                        }
+                        placeholder="What the naive solution does"
+                      />
+                    </label>
+
+                    <label>
+                      Optimized
+                      <textarea
+                        rows={3}
+                        value={form.compareOptimized}
+                        onChange={(event) =>
+                          setForm({ ...form, compareOptimized: event.target.value })
+                        }
+                        placeholder="What you changed to improve it"
+                      />
+                    </label>
+
+                    <label>
+                      Why better
+                      <textarea
+                        rows={3}
+                        value={form.compareWhyBetter}
+                        onChange={(event) =>
+                          setForm({ ...form, compareWhyBetter: event.target.value })
+                        }
+                        placeholder="Why the optimized version wins"
+                      />
+                    </label>
+                  </div>
+
+                  <label>
+                    Rating
+                    <input
+                      type="number"
+                      min={0}
+                      max={10}
+                      value={form.rating}
+                      onChange={(event) =>
+                        setForm({ ...form, rating: Number(event.target.value) || 0 })
+                      }
+                    />
+                  </label>
 
                   <label>
                     Link
@@ -1816,6 +1982,39 @@ export default function App() {
                     />
                   </label>
 
+                  <div className="mistake-log-block">
+                    <p className="panel-label">Mistake log</p>
+                    <label>
+                      What went wrong
+                      <textarea
+                        rows={3}
+                        value={form.mistakeTrigger}
+                        onChange={(event) => setForm({ ...form, mistakeTrigger: event.target.value })}
+                        placeholder="Where the mistake happened"
+                      />
+                    </label>
+
+                    <label>
+                      Why it happened
+                      <textarea
+                        rows={3}
+                        value={form.mistakeReason}
+                        onChange={(event) => setForm({ ...form, mistakeReason: event.target.value })}
+                        placeholder="Wrong assumption, edge case, or missed detail"
+                      />
+                    </label>
+
+                    <label>
+                      Fix / takeaway
+                      <textarea
+                        rows={3}
+                        value={form.mistakeFix}
+                        onChange={(event) => setForm({ ...form, mistakeFix: event.target.value })}
+                        placeholder="What you will do next time"
+                      />
+                    </label>
+                  </div>
+
                   <label>
                     Tags
                     <input
@@ -1860,6 +2059,42 @@ export default function App() {
                     </button>
                   </div>
 
+                  {activeProblem ? <ActiveRecallPanel problem={activeProblem} /> : null}
+
+                  <div className="pattern-invariant-card">
+                    <p className="panel-label">Pattern + invariant</p>
+                    <div className="pattern-invariant-grid">
+                      <div>
+                        <span className="pattern-invariant-label">Pattern</span>
+                        <strong>{activeProblem?.pattern?.trim() || form.pattern.trim() || "Not set yet"}</strong>
+                      </div>
+                      <div>
+                        <span className="pattern-invariant-label">Invariant</span>
+                        <strong>
+                          {activeProblem?.invariant?.trim() || form.invariant.trim() || "Not set yet"}
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="compare-approaches-card">
+                    <p className="panel-label">Compare approaches</p>
+                    <div className="compare-approaches-grid">
+                      <div>
+                        <span className="compare-label">Brute force</span>
+                        <strong>{activeProblem?.compareBruteForce?.trim() || form.compareBruteForce.trim() || "Not set yet"}</strong>
+                      </div>
+                      <div>
+                        <span className="compare-label">Optimized</span>
+                        <strong>{activeProblem?.compareOptimized?.trim() || form.compareOptimized.trim() || "Not set yet"}</strong>
+                      </div>
+                      <div>
+                        <span className="compare-label">Why better</span>
+                        <strong>{activeProblem?.compareWhyBetter?.trim() || form.compareWhyBetter.trim() || "Not set yet"}</strong>
+                      </div>
+                    </div>
+                  </div>
+
                   <label>
                     Note
                     <input
@@ -1878,6 +2113,39 @@ export default function App() {
                       placeholder="What you learned"
                     />
                   </label>
+
+                  <div className="mistake-log-block">
+                    <p className="panel-label">Mistake log</p>
+                    <label>
+                      What went wrong
+                      <textarea
+                        rows={3}
+                        value={form.mistakeTrigger}
+                        onChange={(event) => setForm({ ...form, mistakeTrigger: event.target.value })}
+                        placeholder="Where the mistake happened"
+                      />
+                    </label>
+
+                    <label>
+                      Why it happened
+                      <textarea
+                        rows={3}
+                        value={form.mistakeReason}
+                        onChange={(event) => setForm({ ...form, mistakeReason: event.target.value })}
+                        placeholder="Wrong assumption, edge case, or missed detail"
+                      />
+                    </label>
+
+                    <label>
+                      Fix / takeaway
+                      <textarea
+                        rows={3}
+                        value={form.mistakeFix}
+                        onChange={(event) => setForm({ ...form, mistakeFix: event.target.value })}
+                        placeholder="What you will do next time"
+                      />
+                    </label>
+                  </div>
 
                   {activeProblem ? (
                     <p className="muted">Saved: {activeProblem.title}</p>
@@ -1912,3 +2180,35 @@ function StatCard({ label, value, hint }: { label: string; value: number; hint: 
     </article>
   );
 }
+
+const ActiveRecallPanel = memo(function ActiveRecallPanel({ problem }: { problem: Problem }) {
+  const [showHints, setShowHints] = useState(false);
+  const prompts = useMemo(() => buildRecallPrompts(problem), [problem]);
+
+  return (
+    <section className="recall-panel">
+      <div className="section-heading">
+        <div>
+          <p className="panel-label">Active recall</p>
+          <h3>Answer before you reveal</h3>
+        </div>
+        <button className="secondary-btn recall-toggle" onClick={() => setShowHints((value) => !value)}>
+          {showHints ? "Hide hints" : "Show hints"}
+        </button>
+      </div>
+
+      <p className="section-note">
+        Quick self-check. Try to answer each prompt from memory, then reveal the hint if you get stuck.
+      </p>
+
+      <div className="recall-grid">
+        {prompts.map((prompt) => (
+          <article key={prompt.question} className="recall-card">
+            <strong>{prompt.question}</strong>
+            <span>{showHints ? prompt.hint : "Think first, then reveal the hint."}</span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+});
