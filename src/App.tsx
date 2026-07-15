@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState, Fragment, type FormEvent } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
 import { topicSubCategories } from "./data/categories";
 
 type Difficulty = "Easy" | "Medium" | "Hard";
@@ -138,6 +138,11 @@ type RevisionState = {
   daysAway: number | null;
 };
 
+type RevisionQueueMeta = {
+  score: number;
+  label: string;
+};
+
 type ProblemRowProps = {
   problem: Problem;
   displayIndex: number;
@@ -149,8 +154,6 @@ type ProblemRowProps = {
   onTogglePin: (problem: Problem) => void;
   onOpenLink: (problem: Problem) => void;
   onDelete: (problemId: string) => void;
-  rowLimit: number;
-  onLoadMore: () => void;
 };
 
 type SectionBlockProps = {
@@ -171,6 +174,8 @@ type SectionBlockProps = {
   onTogglePin: (problem: Problem) => void;
   onOpenLink: (problem: Problem) => void;
   onDelete: (problemId: string) => void;
+  rowLimit: number;
+  onLoadMore: () => void;
 };
 
 function formatRating(rating?: number) {
@@ -197,6 +202,11 @@ function splitMistakeLog(value?: string | null) {
 type RecallPrompt = {
   question: string;
   hint: string;
+};
+
+type SummaryItem = {
+  label: string;
+  value: string;
 };
 
 function buildRecallPrompts(problem: Problem): RecallPrompt[] {
@@ -236,6 +246,49 @@ function buildRecallPrompts(problem: Problem): RecallPrompt[] {
     {
       question: "How would you explain the optimized idea in one sentence?",
       hint: problem.shortNote || "keep it short and focus on the core transition",
+    },
+  ];
+}
+
+function buildProblemSummary(problem: Problem): SummaryItem[] {
+  const { trigger, reason, fix } = splitMistakeLog(problem.mistakeLog);
+
+  return [
+    {
+      label: "Problem",
+      value: `${problem.title}${problem.platformName ? ` · ${problem.platformName}` : ""}`,
+    },
+    {
+      label: "Pattern",
+      value: problem.pattern?.trim() || "Not set yet",
+    },
+    {
+      label: "Invariant",
+      value: problem.invariant?.trim() || "Not set yet",
+    },
+    {
+      label: "Brute force",
+      value: problem.compareBruteForce?.trim() || "Not set yet",
+    },
+    {
+      label: "Optimized idea",
+      value: problem.compareOptimized?.trim() || problem.longNote?.trim() || "Not set yet",
+    },
+    {
+      label: "Why better",
+      value: problem.compareWhyBetter?.trim() || "Not set yet",
+    },
+    {
+      label: "Mistake",
+      value: trigger || "Not set yet",
+    },
+    {
+      label: "Fix",
+      value: fix || problem.mistakeFix?.trim() || "Not set yet",
+    },
+    {
+      label: "Takeaway",
+      value: reason || problem.shortNote?.trim() || "Not set yet",
     },
   ];
 }
@@ -318,8 +371,9 @@ function getRevisionState(problem: Problem, now: Date): RevisionState {
   const fallbackDueDate = nextRevisionAt ?? addDays(anchor, spacedRevisionDays[Math.min(stage, spacedRevisionDays.length - 1)] ?? 1);
   const dueDate = isComplete ? null : fallbackDueDate;
   const daysAway = dueDate ? daysBetween(now, dueDate) : null;
-  const isDue = dueDate ? daysAway <= 0 : false;
-  const isOverdue = dueDate ? daysAway < 0 : false;
+  const dueDaysAway = daysAway ?? Number.POSITIVE_INFINITY;
+  const isDue = dueDate ? dueDaysAway <= 0 : false;
+  const isOverdue = dueDate ? dueDaysAway < 0 : false;
   const nextStep = spacedRevisionDays[Math.min(stage, spacedRevisionDays.length - 1)];
 
   return {
@@ -333,6 +387,36 @@ function getRevisionState(problem: Problem, now: Date): RevisionState {
     isScheduled: true,
     daysAway,
   };
+}
+
+function getRevisionQueueMeta(problem: Problem, state: RevisionState): RevisionQueueMeta {
+  const daysAway = state.daysAway ?? Number.POSITIVE_INFINITY;
+
+  let score = 0;
+  let label = "Later";
+
+  if (state.isOverdue) {
+    score += 1000 - Math.min(Math.abs(daysAway), 30);
+    label = "Overdue";
+  } else if (state.isDue) {
+    score += daysAway === 0 ? 900 : 850;
+    label = daysAway === 0 ? "Due today" : "Due soon";
+  } else if (daysAway <= 2) {
+    score += 700 - daysAway * 10;
+    label = daysAway === 1 ? "Tomorrow" : "Soon";
+  } else if (daysAway <= 7) {
+    score += 500 - daysAway * 5;
+    label = "This week";
+  } else {
+    score += 200 - Math.min(daysAway, 30);
+  }
+
+  score += Math.max(problem.priority, 0) * 8;
+  score += problem.isPinned ? 30 : 0;
+  score += Math.max(problem.rating ?? 0, 0) * 3;
+  score += Math.max(state.stage, 0) * 10;
+
+  return { score, label };
 }
 
 function getProblemCategories(problem: Problem): string[] {
@@ -730,7 +814,6 @@ export default function App() {
   const [loginError, setLoginError] = useState("");
   const [topics, setTopics] = useState<Topic[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -747,10 +830,10 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [sectionRowLimit, setSectionRowLimit] = useState(30);
+  const [sectionRowLimit, setSectionRowLimit] = useState(20);
+  const didInitialLoadRef = useRef(false);
   const deferredSearch = useDeferredValue(search);
   const nowDate = useMemo(() => new Date(now), [now]);
-
 
   const selectedTopicData = useMemo(
     () => topics.find((topic) => topic._id === selectedTopic) ?? null,
@@ -761,17 +844,12 @@ export default function App() {
     [activeProblem, nowDate]
   );
 
-  const visibleStats = useMemo(() => {
-    if (selectedTopic === "all") {
-      return stats;
-    }
-
-    const topicProblems = problems.filter((problem) => problem.topic._id === selectedTopic);
-    const totalProblems = topicProblems.length;
-    const solvedProblems = topicProblems.filter((problem) => problem.status === "solved").length;
-    const revisitProblems = topicProblems.filter((problem) => problem.status === "revisit").length;
-    const unsolvedProblems = topicProblems.filter((problem) => problem.status === "unsolved").length;
-    const skippedProblems = topicProblems.filter((problem) => problem.status === "skipped").length;
+  const stats = useMemo(() => {
+    const totalProblems = problems.length;
+    const solvedProblems = problems.filter((problem) => problem.status === "solved").length;
+    const revisitProblems = problems.filter((problem) => problem.status === "revisit").length;
+    const unsolvedProblems = problems.filter((problem) => problem.status === "unsolved").length;
+    const skippedProblems = problems.filter((problem) => problem.status === "skipped").length;
 
     return {
       totalProblems,
@@ -779,6 +857,21 @@ export default function App() {
       revisitProblems,
       unsolvedProblems,
       skippedProblems,
+    };
+  }, [problems]);
+
+  const visibleStats = useMemo(() => {
+    if (selectedTopic === "all") {
+      return stats;
+    }
+
+    const topicProblems = problems.filter((problem) => problem.topic._id === selectedTopic);
+    return {
+      totalProblems: topicProblems.length,
+      solvedProblems: topicProblems.filter((problem) => problem.status === "solved").length,
+      revisitProblems: topicProblems.filter((problem) => problem.status === "revisit").length,
+      unsolvedProblems: topicProblems.filter((problem) => problem.status === "unsolved").length,
+      skippedProblems: topicProblems.filter((problem) => problem.status === "skipped").length,
     };
   }, [problems, selectedTopic, stats]);
 
@@ -804,14 +897,12 @@ export default function App() {
         setLoading(true);
       }
       setError("");
-      const [topicsRes, problemsRes, statsRes] = await Promise.all([
+      const [topicsRes, problemsRes] = await Promise.all([
         api<{ topics: Topic[] }>("/api/topics"),
         api<{ problems: Problem[] }>("/api/problems?brief=1"),
-        api<{ stats: Stats }>("/api/stats"),
       ]);
       setTopics(topicsRes.topics);
       setProblems(problemsRes.problems);
-      setStats(statsRes.stats);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -849,17 +940,41 @@ export default function App() {
 
   useEffect(() => {
     if (!isAuthenticated) {
+      didInitialLoadRef.current = false;
       return;
     }
 
+    if (didInitialLoadRef.current) {
+      return;
+    }
+
+    didInitialLoadRef.current = true;
+
     void loadData({
-      silent: topics.length > 0 || problems.length > 0 || stats !== null,
+      silent: topics.length > 0 || problems.length > 0,
     });
   }, [isAuthenticated]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => window.clearInterval(timer);
+    let timer: number | undefined;
+
+    const scheduleNextUpdate = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setHours(24, 0, 0, 0);
+      timer = window.setTimeout(() => {
+        setNow(Date.now());
+        scheduleNextUpdate();
+      }, nextMidnight.getTime() - now.getTime());
+    };
+
+    scheduleNextUpdate();
+
+    return () => {
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
   }, []);
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -904,7 +1019,6 @@ export default function App() {
   const filteredProblems = useMemo(() => {
     const needle = deferredSearch.trim().toLowerCase();
     return problems.filter((problem) => {
-      const revisionState = revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate);
       const categories = problemCategoryMap.get(problem._id) ?? getProblemCategories(problem);
       const matchesTopic = selectedTopic === "all" || problem.topic._id === selectedTopic;
       const matchesStatus =
@@ -933,7 +1047,7 @@ export default function App() {
 
       return matchesTopic && matchesStatus && matchesDifficulty && matchesSearch;
     });
-  }, [deferredSearch, difficultyFilter, nowDate, problemCategoryMap, problems, revisionStateMap, selectedTopic, statusFilter]);
+  }, [deferredSearch, difficultyFilter, problemCategoryMap, problems, selectedTopic, statusFilter]);
 
   const sortedFilteredProblems = useMemo(() => {
     return [...filteredProblems].sort((left, right) => {
@@ -1061,6 +1175,12 @@ export default function App() {
       .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
       .filter(({ state }) => state.isDue || state.isOverdue)
       .sort((left, right) => {
+        const leftMeta = getRevisionQueueMeta(left.problem, left.state);
+        const rightMeta = getRevisionQueueMeta(right.problem, right.state);
+        if (rightMeta.score !== leftMeta.score) {
+          return rightMeta.score - leftMeta.score;
+        }
+
         const leftTime = left.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         const rightTime = right.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         return leftTime - rightTime;
@@ -1073,6 +1193,12 @@ export default function App() {
       .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
       .filter(({ state }) => !state.isDue && !state.isOverdue && !state.isComplete && state.dueDate)
       .sort((left, right) => {
+        const leftMeta = getRevisionQueueMeta(left.problem, left.state);
+        const rightMeta = getRevisionQueueMeta(right.problem, right.state);
+        if (rightMeta.score !== leftMeta.score) {
+          return rightMeta.score - leftMeta.score;
+        }
+
         const leftTime = left.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         const rightTime = right.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         return leftTime - rightTime;
@@ -1121,7 +1247,7 @@ export default function App() {
       compareWhyBetter: problem.compareWhyBetter ?? "",
       rating: problem.rating ?? 0,
       shortNote: problem.shortNote,
-      longNote: problem.longNote,
+      longNote: problem.longNote ?? "",
       mistakeLog: problem.mistakeLog ?? composeMistakeLog(problem.mistakeTrigger ?? "", problem.mistakeReason ?? "", problem.mistakeFix ?? ""),
       mistakeTrigger: problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger,
       mistakeReason: problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason,
@@ -1583,6 +1709,9 @@ export default function App() {
                           <strong>{problem.title}</strong>
                           <span>{state.subtitle}</span>
                         </div>
+                        <span className="revision-priority-pill">
+                          {getRevisionQueueMeta(problem, state).label}
+                        </span>
                         <button className="revision-action" onClick={() => openProblemLink(problem)}>
                           Revise
                         </button>
@@ -1604,6 +1733,9 @@ export default function App() {
                           <strong>{problem.title}</strong>
                           <span>{state.subtitle}</span>
                         </div>
+                        <span className="revision-priority-pill subtle">
+                          {getRevisionQueueMeta(problem, state).label}
+                        </span>
                         <button className="revision-action ghost" onClick={() => openEditDrawer(problem)}>
                           Open
                         </button>
@@ -1620,6 +1752,23 @@ export default function App() {
               <span>{revisionProblems.length} items in revisit queue</span>
               <span>{dueRevisionProblems.length} due now</span>
               <span>{sidebarRevisionProblems.length} upcoming</span>
+            </div>
+          </section>
+        ) : null}
+
+        {!drawerOpen && activeProblem ? (
+          <section className="study-focus-section">
+            <div className="section-heading">
+              <div>
+                <p className="panel-label">Study focus</p>
+                <h3>Last opened problem</h3>
+              </div>
+              <span className="section-note">Visible here without reopening the drawer</span>
+            </div>
+
+            <div className="study-focus-grid">
+              <ProblemSummaryPanel problem={activeProblem} />
+              <ActiveRecallPanel problem={activeProblem} />
             </div>
           </section>
         ) : null}
@@ -2046,20 +2195,18 @@ export default function App() {
             ) : (
               <>
                 <div className="drawer-body notes-body">
-                  <div className="notes-head">
-                    <button
-                      className="link-btn"
-                      onClick={() => {
-                        if (activeProblem?.platformUrl) {
+                <div className="notes-head">
+                  <button
+                    className="link-btn"
+                    onClick={() => {
+                      if (activeProblem?.platformUrl) {
                           window.open(activeProblem.platformUrl, "_blank", "noopener,noreferrer");
                         }
-                      }}
-                    >
-                      Link
-                    </button>
-                  </div>
-
-                  {activeProblem ? <ActiveRecallPanel problem={activeProblem} /> : null}
+                    }}
+                  >
+                    Link
+                  </button>
+                </div>
 
                   <div className="pattern-invariant-card">
                     <p className="panel-label">Pattern + invariant</p>
@@ -2206,6 +2353,34 @@ const ActiveRecallPanel = memo(function ActiveRecallPanel({ problem }: { problem
           <article key={prompt.question} className="recall-card">
             <strong>{prompt.question}</strong>
             <span>{showHints ? prompt.hint : "Think first, then reveal the hint."}</span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+});
+
+const ProblemSummaryPanel = memo(function ProblemSummaryPanel({ problem }: { problem: Problem }) {
+  const items = useMemo(() => buildProblemSummary(problem), [problem]);
+
+  return (
+    <section className="summary-template-card">
+      <div className="section-heading">
+        <div>
+          <p className="panel-label">Study summary</p>
+          <h3>One-page memory sheet</h3>
+        </div>
+      </div>
+
+      <p className="section-note">
+        This is a compact recap of the problem using the fields you already filled in, so review stays fast.
+      </p>
+
+      <div className="summary-template-grid">
+        {items.map((item) => (
+          <article key={item.label} className="summary-template-item">
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
           </article>
         ))}
       </div>

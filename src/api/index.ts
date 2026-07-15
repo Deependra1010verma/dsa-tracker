@@ -15,6 +15,7 @@ const spacedRevisionDays = [1, 3, 7, 15, 30] as const;
 let storageMode: "mongo" | "memory" = "mongo";
 let databaseReady = false;
 let databaseError = "";
+let databaseInitPromise: Promise<void> | null = null;
 
 app.use(express.json({ limit: "2mb" }));
 
@@ -23,6 +24,45 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
     Promise.resolve(handler(req, res, next)).catch(next);
   };
 };
+
+async function initializeStorage() {
+  try {
+    await connectDb(mongoUri);
+    await ensureSeedTopics();
+    await ensureSeedProblems();
+    await backfillRevisionSchedules();
+    storageMode = "mongo";
+    databaseReady = true;
+    databaseError = "";
+    console.log("Database ready");
+  } catch (error) {
+    storageMode = "memory";
+    databaseReady = true;
+    databaseError =
+      error instanceof Error
+        ? `Mongo unavailable, using in-memory fallback: ${error.message}`
+        : "Mongo unavailable, using in-memory fallback";
+    console.warn(databaseError);
+  }
+}
+
+databaseInitPromise = initializeStorage();
+
+app.use(
+  "/api",
+  asyncHandler(async (req, res, next) => {
+    if (req.path === "/health") {
+      next();
+      return;
+    }
+
+    if (databaseInitPromise) {
+      await databaseInitPromise;
+    }
+
+    next();
+  })
+);
 
 function normalizeSearch(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -1066,7 +1106,7 @@ app.delete(
 );
 
 app.get("/api/health", (_req, res) => {
-  res.json({
+  res.status(databaseReady ? 200 : 503).json({
     ok: true,
     storageMode,
     databaseReady,
@@ -1097,24 +1137,6 @@ app.use(
 app.listen(port, () => {
   console.log(`API running on port ${port}`);
 });
-
-void (async () => {
-  try {
-    await connectDb(mongoUri);
-    await ensureSeedTopics();
-    await ensureSeedProblems();
-    await backfillRevisionSchedules();
-    storageMode = "mongo";
-    databaseReady = true;
-    databaseError = "";
-    console.log("Database ready");
-  } catch (error) {
-    storageMode = "memory";
-    databaseReady = true;
-    databaseError = error instanceof Error ? `Mongo unavailable, using in-memory fallback: ${error.message}` : "Mongo unavailable, using in-memory fallback";
-    console.warn(databaseError);
-  }
-})();
 
 export default app;
 

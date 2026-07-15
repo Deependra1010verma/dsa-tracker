@@ -660,6 +660,24 @@ button {
   font-size: 0.82rem;
 }
 
+.revision-priority-pill {
+  margin-left: auto;
+  align-self: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.revision-priority-pill.subtle {
+  background: rgba(125, 211, 252, 0.1);
+  color: #bae6fd;
+}
+
 .revision-action,
 .revision-inline-action {
   border: 1px solid rgba(125, 211, 252, 0.24);
@@ -793,6 +811,19 @@ textarea {
   gap: 16px;
   align-items: center;
   margin-bottom: 14px;
+}
+
+.study-focus-section {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.study-focus-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
+  gap: 14px;
+  align-items: start;
 }
 
 .empty-state {
@@ -1120,10 +1151,10 @@ textarea {
 }
 
 .drawer.notes-drawer {
-  width: min(460px, 100%);
+  width: min(640px, 100%);
   height: auto;
-  max-height: min(84vh, 760px);
-  border-radius: 24px;
+  max-height: min(90vh, 880px);
+  border-radius: 28px;
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5);
 }
 
@@ -1196,6 +1227,52 @@ textarea {
   color: var(--muted);
   line-height: 1.5;
   font-size: 0.92rem;
+}
+
+.summary-template-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(245, 158, 11, 0.14);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(245, 158, 11, 0.08), transparent 28%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.summary-template-card .section-heading {
+  align-items: center;
+}
+
+.summary-template-card .section-note {
+  margin: 0;
+}
+
+.summary-template-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-template-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(6, 10, 20, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.summary-template-item span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.summary-template-item strong {
+  font-size: 0.94rem;
+  line-height: 1.45;
 }
 
 .pattern-invariant-card {
@@ -1599,6 +1676,15 @@ textarea {
 
   .revision-item {
     width: 100%;
+  }
+
+  .study-focus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-template-grid,
+  .pattern-invariant-grid {
+    grid-template-columns: 1fr;
   }
 
   .auth-hero,

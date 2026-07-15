@@ -25,6 +25,18 @@ async function waitForApi() {
     try {
       const response = await fetch(apiUrl);
       if (response.ok) {
+        const payload = await response.json().catch(() => null);
+        if (payload?.databaseReady) {
+          return true;
+        }
+      } else if (response.status === 503) {
+        const payload = await response.json().catch(() => null);
+        if (payload?.databaseReady) {
+          return true;
+        }
+      }
+
+      if (response.ok && response.headers.get("content-type")?.includes("application/json") === false) {
         return true;
       }
     } catch {
