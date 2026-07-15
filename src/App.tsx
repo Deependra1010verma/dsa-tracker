@@ -797,6 +797,8 @@ type PersistedViewState = {
   drawerMode?: "edit" | "notes";
 };
 
+type WorkspaceSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
 function readPersistedViewState(): PersistedViewState {
   if (typeof window === "undefined") {
     return {};
@@ -863,11 +865,14 @@ export default function App() {
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(() => new Set());
   const [form, setForm] = useState<ProblemFormState>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [workspaceSaveState, setWorkspaceSaveState] = useState<WorkspaceSaveState>("idle");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
   const didInitialLoadRef = useRef(false);
   const restoredViewRef = useRef(false);
+  const skipWorkspaceAutosaveRef = useRef(false);
+  const workspaceSaveTimerRef = useRef<number | null>(null);
   const deferredSearch = useDeferredValue(search);
   const nowDate = useMemo(() => new Date(now), [now]);
 
@@ -1219,6 +1224,61 @@ export default function App() {
     return topicGroups;
   }, [sortedFilteredProblems]);
 
+  const workspaceProblemIds = useMemo(
+    () => sortedFilteredProblems.map((problem) => problem._id),
+    [sortedFilteredProblems]
+  );
+
+  const activeWorkspaceIndex = useMemo(() => {
+    if (!activeProblem) {
+      return -1;
+    }
+
+    return workspaceProblemIds.indexOf(activeProblem._id);
+  }, [activeProblem, workspaceProblemIds]);
+
+  const previousWorkspaceProblem = useMemo(() => {
+    if (activeWorkspaceIndex <= 0) {
+      return null;
+    }
+
+    return sortedFilteredProblems[activeWorkspaceIndex - 1] ?? null;
+  }, [activeWorkspaceIndex, sortedFilteredProblems]);
+
+  const nextWorkspaceProblem = useMemo(() => {
+    if (activeWorkspaceIndex < 0 || activeWorkspaceIndex >= sortedFilteredProblems.length - 1) {
+      return null;
+    }
+
+    return sortedFilteredProblems[activeWorkspaceIndex + 1] ?? null;
+  }, [activeWorkspaceIndex, sortedFilteredProblems]);
+
+  const hasWorkspaceDraftChanges = useMemo(() => {
+    if (!activeProblem || drawerOpen) {
+      return false;
+    }
+
+    const baselineTrigger = activeProblem.mistakeTrigger ?? splitMistakeLog(activeProblem.mistakeLog).trigger;
+    const baselineReason = activeProblem.mistakeReason ?? splitMistakeLog(activeProblem.mistakeLog).reason;
+    const baselineFix = activeProblem.mistakeFix ?? splitMistakeLog(activeProblem.mistakeLog).fix;
+
+    return (
+      form.shortNote !== (activeProblem.shortNote ?? "") ||
+      form.longNote !== (activeProblem.longNote ?? "") ||
+      form.mistakeTrigger !== baselineTrigger ||
+      form.mistakeReason !== baselineReason ||
+      form.mistakeFix !== baselineFix
+    );
+  }, [
+    activeProblem,
+    drawerOpen,
+    form.longNote,
+    form.mistakeFix,
+    form.mistakeReason,
+    form.mistakeTrigger,
+    form.shortNote,
+  ]);
+
   const revisionProblems = useMemo(
     () => problems.filter((problem) => {
       const state = revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate);
@@ -1295,6 +1355,7 @@ export default function App() {
   }, [selectedTopic, selectedTopicData?.name, topics]);
 
   const syncFormFromProblem = useCallback((problem: Problem) => {
+    skipWorkspaceAutosaveRef.current = true;
     setForm({
       title: problem.title,
       topicId: problem.topic._id,
@@ -1319,6 +1380,7 @@ export default function App() {
       priority: problem.priority,
       isPinned: problem.isPinned,
     });
+    setWorkspaceSaveState("idle");
   }, []);
 
   const openStudyView = useCallback((problem: Problem) => {
@@ -1348,6 +1410,154 @@ export default function App() {
   const openProblemDrawer = useCallback((problem: Problem) => {
     openStudyView(problem);
   }, [openStudyView]);
+
+  const saveProblem = useCallback(async (options?: { keepWorkspaceOpen?: boolean }) => {
+    if (!form.title.trim() || !form.topicId || !form.platformName.trim() || !form.platformUrl.trim()) {
+      setError("Title, topic, platform name, and platform link are required.");
+      setWorkspaceSaveState("error");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setWorkspaceSaveState("saving");
+      setError("");
+      const payload = {
+        title: form.title.trim(),
+        topicId: form.topicId,
+        roadmapSection: form.roadmapSection.trim(),
+        platformName: form.platformName.trim(),
+        platformUrl: form.platformUrl.trim(),
+        difficulty: form.difficulty,
+        status: form.status,
+        pattern: form.pattern.trim(),
+        invariant: form.invariant.trim(),
+        compareBruteForce: form.compareBruteForce.trim(),
+        compareOptimized: form.compareOptimized.trim(),
+        compareWhyBetter: form.compareWhyBetter.trim(),
+        rating: form.rating,
+        shortNote: form.shortNote.trim(),
+        longNote: form.longNote.trim(),
+        mistakeTrigger: form.mistakeTrigger.trim(),
+        mistakeReason: form.mistakeReason.trim(),
+        mistakeFix: form.mistakeFix.trim(),
+        mistakeLog: composeMistakeLog(form.mistakeTrigger, form.mistakeReason, form.mistakeFix),
+        tags: form.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        priority: form.priority,
+        isPinned: form.isPinned,
+      };
+
+      if (activeProblem) {
+        const response = await api<{ problem: Problem }>(`/api/problems/${activeProblem._id}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+        upsertProblem(response.problem);
+        setActiveProblem(response.problem);
+        syncFormFromProblem(response.problem);
+      } else {
+        const response = await api<{ problem: Problem }>("/api/problems", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        appendProblem(response.problem);
+        setActiveProblem(response.problem);
+        syncFormFromProblem(response.problem);
+      }
+
+      if (drawerOpen) {
+        setDrawerOpen(false);
+      }
+
+      if (!activeProblem && !options?.keepWorkspaceOpen) {
+        setForm(emptyForm);
+      }
+      setWorkspaceSaveState("saved");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save problem");
+      setWorkspaceSaveState("error");
+    } finally {
+      setSaving(false);
+    }
+  }, [activeProblem, appendProblem, drawerOpen, form, setError, setSaving, setDrawerOpen, setActiveProblem, setForm, syncFormFromProblem, upsertProblem]);
+
+  useEffect(() => {
+    if (!activeProblem || drawerOpen) {
+      if (workspaceSaveTimerRef.current !== null) {
+        window.clearTimeout(workspaceSaveTimerRef.current);
+        workspaceSaveTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (skipWorkspaceAutosaveRef.current) {
+      skipWorkspaceAutosaveRef.current = false;
+      return;
+    }
+
+    const baselineShortNote = activeProblem.shortNote ?? "";
+    const baselineLongNote = activeProblem.longNote ?? "";
+    const baselineTrigger = activeProblem.mistakeTrigger ?? splitMistakeLog(activeProblem.mistakeLog).trigger;
+    const baselineReason = activeProblem.mistakeReason ?? splitMistakeLog(activeProblem.mistakeLog).reason;
+    const baselineFix = activeProblem.mistakeFix ?? splitMistakeLog(activeProblem.mistakeLog).fix;
+
+    const hasWorkspaceChanges =
+      form.shortNote !== baselineShortNote ||
+      form.longNote !== baselineLongNote ||
+      form.mistakeTrigger !== baselineTrigger ||
+      form.mistakeReason !== baselineReason ||
+      form.mistakeFix !== baselineFix;
+
+    if (!hasWorkspaceChanges) {
+      setWorkspaceSaveState((current) => (current === "saving" ? current : "idle"));
+      if (workspaceSaveTimerRef.current !== null) {
+        window.clearTimeout(workspaceSaveTimerRef.current);
+        workspaceSaveTimerRef.current = null;
+      }
+      return;
+    }
+
+    setWorkspaceSaveState("dirty");
+    if (workspaceSaveTimerRef.current !== null) {
+      window.clearTimeout(workspaceSaveTimerRef.current);
+    }
+
+    workspaceSaveTimerRef.current = window.setTimeout(() => {
+      void saveProblem({ keepWorkspaceOpen: true });
+      workspaceSaveTimerRef.current = null;
+    }, 900);
+
+    return () => {
+      if (workspaceSaveTimerRef.current !== null) {
+        window.clearTimeout(workspaceSaveTimerRef.current);
+        workspaceSaveTimerRef.current = null;
+      }
+    };
+  }, [
+    activeProblem,
+    drawerOpen,
+    form.longNote,
+    form.mistakeFix,
+    form.mistakeReason,
+    form.mistakeTrigger,
+    form.shortNote,
+    saveProblem,
+  ]);
+
+  useEffect(() => {
+    if (workspaceSaveState !== "saved") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setWorkspaceSaveState("idle");
+    }, 1400);
+
+    return () => window.clearTimeout(timer);
+  }, [workspaceSaveState]);
 
   useEffect(() => {
     if (!isAuthenticated || restoredViewRef.current || problems.length === 0) {
@@ -1408,75 +1618,6 @@ export default function App() {
       return next;
     });
   }, []);
-
-  const saveProblem = useCallback(async () => {
-    if (!form.title.trim() || !form.topicId || !form.platformName.trim() || !form.platformUrl.trim()) {
-      setError("Title, topic, platform name, and platform link are required.");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      setError("");
-      const payload = {
-        title: form.title.trim(),
-        topicId: form.topicId,
-        roadmapSection: form.roadmapSection.trim(),
-        platformName: form.platformName.trim(),
-        platformUrl: form.platformUrl.trim(),
-        difficulty: form.difficulty,
-        status: form.status,
-        pattern: form.pattern.trim(),
-        invariant: form.invariant.trim(),
-        compareBruteForce: form.compareBruteForce.trim(),
-        compareOptimized: form.compareOptimized.trim(),
-        compareWhyBetter: form.compareWhyBetter.trim(),
-        rating: form.rating,
-        shortNote: form.shortNote.trim(),
-        longNote: form.longNote.trim(),
-        mistakeTrigger: form.mistakeTrigger.trim(),
-        mistakeReason: form.mistakeReason.trim(),
-        mistakeFix: form.mistakeFix.trim(),
-        mistakeLog: composeMistakeLog(form.mistakeTrigger, form.mistakeReason, form.mistakeFix),
-        tags: form.tags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-        priority: form.priority,
-        isPinned: form.isPinned,
-      };
-
-      if (activeProblem) {
-        const response = await api<{ problem: Problem }>(`/api/problems/${activeProblem._id}`, {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-        upsertProblem(response.problem);
-        setActiveProblem(response.problem);
-        syncFormFromProblem(response.problem);
-      } else {
-        const response = await api<{ problem: Problem }>("/api/problems", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        appendProblem(response.problem);
-        setActiveProblem(response.problem);
-        syncFormFromProblem(response.problem);
-      }
-
-      if (drawerOpen) {
-        setDrawerOpen(false);
-      }
-
-      if (!activeProblem) {
-        setForm(emptyForm);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save problem");
-    } finally {
-      setSaving(false);
-    }
-  }, [activeProblem, appendProblem, drawerOpen, form, setError, setSaving, setDrawerOpen, setActiveProblem, setForm, syncFormFromProblem, upsertProblem]);
 
   const updateStatus = useCallback(async (problem: Problem, nextStatus: Status) => {
     try {
@@ -1866,9 +2007,45 @@ export default function App() {
                 <p className="section-note">
                   {activeProblem.topic.name} · {activeProblem.platformName} · {activeProblem.difficulty}
                 </p>
+                <p className={`workspace-save-indicator workspace-save-${workspaceSaveState}`}>
+                  {workspaceSaveState === "dirty"
+                    ? "Unsaved changes"
+                    : workspaceSaveState === "saving"
+                    ? "Saving..."
+                    : workspaceSaveState === "saved"
+                    ? "Saved"
+                    : workspaceSaveState === "error"
+                    ? "Save failed"
+                    : "Autosave on"}
+                </p>
               </div>
 
               <div className="problem-workspace-actions">
+                <span className="workspace-nav-meta">
+                  {activeWorkspaceIndex >= 0 ? `${activeWorkspaceIndex + 1} / ${workspaceProblemIds.length}` : "Workspace"}
+                </span>
+                <button
+                  className="secondary-btn"
+                  disabled={!previousWorkspaceProblem}
+                  onClick={() => {
+                    if (previousWorkspaceProblem) {
+                      openStudyView(previousWorkspaceProblem);
+                    }
+                  }}
+                >
+                  Previous
+                </button>
+                <button
+                  className="secondary-btn"
+                  disabled={!nextWorkspaceProblem}
+                  onClick={() => {
+                    if (nextWorkspaceProblem) {
+                      openStudyView(nextWorkspaceProblem);
+                    }
+                  }}
+                >
+                  Next
+                </button>
                 <button className="secondary-btn" onClick={() => setActiveProblem(null)}>
                   Back to list
                 </button>

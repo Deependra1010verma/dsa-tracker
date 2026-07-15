@@ -869,11 +869,42 @@ textarea {
   margin: 0;
 }
 
+.workspace-save-indicator {
+  margin: 10px 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.workspace-save-dirty {
+  color: #fdba74;
+}
+
+.workspace-save-saving {
+  color: #93c5fd;
+}
+
+.workspace-save-saved {
+  color: #86efac;
+}
+
+.workspace-save-error {
+  color: #fca5a5;
+}
+
 .problem-workspace-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.workspace-nav-meta {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .problem-workspace-grid {
