@@ -149,6 +149,7 @@ type ProblemRowProps = {
   canEdit: boolean;
   revisionState: RevisionState;
   categories: string[];
+  onOpenStudy: (problem: Problem) => void;
   onToggleStatus: (problem: Problem, nextStatus: Status) => void;
   onOpenEdit: (problem: Problem) => void;
   onTogglePin: (problem: Problem) => void;
@@ -169,6 +170,7 @@ type SectionBlockProps = {
   revisionStateMap: Map<string, RevisionState>;
   problemCategoryMap: Map<string, string[]>;
   nowDate: Date;
+  onOpenStudy: (problem: Problem) => void;
   onToggleStatus: (problem: Problem, nextStatus: Status) => void;
   onOpenEdit: (problem: Problem) => void;
   onTogglePin: (problem: Problem) => void;
@@ -544,6 +546,7 @@ const ProblemRow = memo(function ProblemRow({
   canEdit,
   revisionState,
   categories,
+  onOpenStudy,
   onToggleStatus,
   onOpenEdit,
   onTogglePin,
@@ -578,7 +581,7 @@ const ProblemRow = memo(function ProblemRow({
           </button>
         </div>
       </td>
-      <td className="problem-title-col" onClick={() => onOpenEdit(problem)}>
+      <td className="problem-title-col" onClick={() => onOpenStudy(problem)}>
         <div className="problem-title-wrapper">
           <span className="problem-title-text">{problem.title}</span>
           {problem.pattern ? <span className="pattern-chip">{problem.pattern}</span> : null}
@@ -718,6 +721,7 @@ const SectionBlock = memo(function SectionBlock({
   revisionStateMap,
   problemCategoryMap,
   nowDate,
+  onOpenStudy,
   onToggleStatus,
   onOpenEdit,
   onTogglePin,
@@ -751,6 +755,7 @@ const SectionBlock = memo(function SectionBlock({
           canEdit={canEdit}
           revisionState={revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate)}
           categories={problemCategoryMap.get(problem._id) ?? getProblemCategories(problem)}
+          onOpenStudy={onOpenStudy}
           onToggleStatus={onToggleStatus}
           onOpenEdit={onOpenEdit}
           onTogglePin={onTogglePin}
@@ -776,10 +781,39 @@ declare const __LOGIN_USERNAME__: string;
 declare const __LOGIN_PASSWORD__: string;
 
 const AUTH_STORAGE_KEY = "dsa-tracker-authenticated";
+const APP_VIEW_STATE_KEY = "dsa-tracker-view-state";
 const DEFAULT_LOGIN = {
   username: __LOGIN_USERNAME__.trim(),
   password: __LOGIN_PASSWORD__,
 };
+
+type PersistedViewState = {
+  search?: string;
+  statusFilter?: Status | "all" | "revisit";
+  difficultyFilter?: Difficulty | "all";
+  selectedTopic?: string;
+  activeProblemId?: string | null;
+  drawerOpen?: boolean;
+  drawerMode?: "edit" | "notes";
+};
+
+function readPersistedViewState(): PersistedViewState {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const raw = window.localStorage.getItem(APP_VIEW_STATE_KEY);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw) as PersistedViewState;
+    return parsed ?? {};
+  } catch {
+    return {};
+  }
+}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -800,6 +834,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export default function App() {
   const loginConfigured = Boolean(DEFAULT_LOGIN.username && DEFAULT_LOGIN.password);
+  const persistedViewState = useMemo(() => readPersistedViewState(), []);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -816,13 +851,13 @@ export default function App() {
   const [problems, setProblems] = useState<Problem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<Status | "all" | "revisit">("all");
-  const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">("all");
-  const [selectedTopic, setSelectedTopic] = useState<string>("all");
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [search, setSearch] = useState(persistedViewState.search ?? "");
+  const [statusFilter, setStatusFilter] = useState<Status | "all" | "revisit">(persistedViewState.statusFilter ?? "all");
+  const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">(persistedViewState.difficultyFilter ?? "all");
+  const [selectedTopic, setSelectedTopic] = useState<string>(persistedViewState.selectedTopic ?? "all");
+  const [drawerOpen, setDrawerOpen] = useState(Boolean(persistedViewState.activeProblemId && persistedViewState.drawerOpen));
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
-  const [drawerMode, setDrawerMode] = useState<"edit" | "notes">("notes");
+  const [drawerMode, setDrawerMode] = useState<"edit" | "notes">(persistedViewState.drawerMode ?? "notes");
   const [editMode, setEditMode] = useState(false);
   const [expandedProblems, setExpandedProblems] = useState<Set<string>>(() => new Set());
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(() => new Set());
@@ -832,6 +867,7 @@ export default function App() {
   const [now, setNow] = useState(() => Date.now());
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
   const didInitialLoadRef = useRef(false);
+  const restoredViewRef = useRef(false);
   const deferredSearch = useDeferredValue(search);
   const nowDate = useMemo(() => new Date(now), [now]);
 
@@ -977,6 +1013,24 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isAuthenticated || typeof window === "undefined") {
+      return;
+    }
+
+    const nextState: PersistedViewState = {
+      search,
+      statusFilter,
+      difficultyFilter,
+      selectedTopic,
+      activeProblemId: activeProblem?._id ?? null,
+      drawerOpen,
+      drawerMode,
+    };
+
+    window.localStorage.setItem(APP_VIEW_STATE_KEY, JSON.stringify(nextState));
+  }, [activeProblem?._id, difficultyFilter, drawerMode, drawerOpen, isAuthenticated, search, selectedTopic, statusFilter]);
+
   function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -1014,6 +1068,9 @@ export default function App() {
     setExpandedTopics(new Set());
     setForm(emptyForm);
     setSectionRowLimit(30);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(APP_VIEW_STATE_KEY);
+    }
   }
 
   const filteredProblems = useMemo(() => {
@@ -1218,6 +1275,14 @@ export default function App() {
     });
   }, []);
 
+  const focusTopicList = useCallback((topicId: string, nextStatus: Status | "all" | "revisit") => {
+    setActiveProblem(null);
+    setDrawerOpen(false);
+    setSelectedTopic(topicId);
+    setStatusFilter(nextStatus);
+    setMobileSidebarOpen(false);
+  }, []);
+
   const openAddDrawer = useCallback((topicId?: string) => {
     setActiveProblem(null);
     setDrawerMode("edit");
@@ -1229,9 +1294,7 @@ export default function App() {
     setDrawerOpen(true);
   }, [selectedTopic, selectedTopicData?.name, topics]);
 
-  const openEditDrawer = useCallback((problem: Problem) => {
-    setActiveProblem(problem);
-    setDrawerMode(editMode ? "edit" : "notes");
+  const syncFormFromProblem = useCallback((problem: Problem) => {
     setForm({
       title: problem.title,
       topicId: problem.topic._id,
@@ -1256,41 +1319,82 @@ export default function App() {
       priority: problem.priority,
       isPinned: problem.isPinned,
     });
-    setDrawerOpen(true);
+  }, []);
+
+  const openStudyView = useCallback((problem: Problem) => {
+    setActiveProblem(problem);
+    syncFormFromProblem(problem);
     void hydrateProblemDetails(problem).then((nextProblem) => {
       setActiveProblem(nextProblem);
-      setForm({
-        title: nextProblem.title,
-        topicId: nextProblem.topic._id,
-        roadmapSection: nextProblem.roadmapSection ?? "",
-        platformName: nextProblem.platformName,
-        platformUrl: nextProblem.platformUrl,
-        difficulty: nextProblem.difficulty,
-        status: nextProblem.status,
-        pattern: nextProblem.pattern ?? "",
-        invariant: nextProblem.invariant ?? "",
-        compareBruteForce: nextProblem.compareBruteForce ?? "",
-        compareOptimized: nextProblem.compareOptimized ?? "",
-        compareWhyBetter: nextProblem.compareWhyBetter ?? "",
-        rating: nextProblem.rating ?? 0,
-        shortNote: nextProblem.shortNote,
-        longNote: nextProblem.longNote ?? "",
-        mistakeLog: nextProblem.mistakeLog ?? composeMistakeLog(nextProblem.mistakeTrigger ?? "", nextProblem.mistakeReason ?? "", nextProblem.mistakeFix ?? ""),
-        mistakeTrigger: nextProblem.mistakeTrigger ?? splitMistakeLog(nextProblem.mistakeLog).trigger,
-        mistakeReason: nextProblem.mistakeReason ?? splitMistakeLog(nextProblem.mistakeLog).reason,
-        mistakeFix: nextProblem.mistakeFix ?? splitMistakeLog(nextProblem.mistakeLog).fix,
-        tags: nextProblem.tags.join(", "),
-        priority: nextProblem.priority,
-        isPinned: nextProblem.isPinned,
-      });
+      syncFormFromProblem(nextProblem);
     }).catch((err) => {
       setError(err instanceof Error ? err.message : "Could not load problem details");
     });
-  }, [editMode, hydrateProblemDetails]);
+  }, [hydrateProblemDetails, syncFormFromProblem]);
+
+  const openEditDrawer = useCallback((problem: Problem) => {
+    setActiveProblem(problem);
+    setDrawerMode("edit");
+    syncFormFromProblem(problem);
+    setDrawerOpen(true);
+    void hydrateProblemDetails(problem).then((nextProblem) => {
+      setActiveProblem(nextProblem);
+      syncFormFromProblem(nextProblem);
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : "Could not load problem details");
+    });
+  }, [hydrateProblemDetails, syncFormFromProblem]);
 
   const openProblemDrawer = useCallback((problem: Problem) => {
-    openEditDrawer(problem);
-  }, [openEditDrawer]);
+    openStudyView(problem);
+  }, [openStudyView]);
+
+  useEffect(() => {
+    if (!isAuthenticated || restoredViewRef.current || problems.length === 0) {
+      return;
+    }
+
+    restoredViewRef.current = true;
+    const activeProblemId = persistedViewState.activeProblemId;
+    if (!activeProblemId) {
+      return;
+    }
+
+    const matchedProblem = problems.find((problem) => problem._id === activeProblemId);
+    if (!matchedProblem) {
+      return;
+    }
+
+    if (persistedViewState.drawerOpen) {
+      if (persistedViewState.drawerMode === "edit") {
+        openEditDrawer(matchedProblem);
+      } else {
+        setActiveProblem(matchedProblem);
+        setDrawerMode("notes");
+        setDrawerOpen(true);
+        syncFormFromProblem(matchedProblem);
+        void hydrateProblemDetails(matchedProblem).then((nextProblem) => {
+          setActiveProblem(nextProblem);
+          syncFormFromProblem(nextProblem);
+        }).catch((err) => {
+          setError(err instanceof Error ? err.message : "Could not load problem details");
+        });
+      }
+      return;
+    }
+
+    openStudyView(matchedProblem);
+  }, [
+    hydrateProblemDetails,
+    isAuthenticated,
+    openEditDrawer,
+    openStudyView,
+    persistedViewState.activeProblemId,
+    persistedViewState.drawerMode,
+    persistedViewState.drawerOpen,
+    problems,
+    syncFormFromProblem,
+  ]);
 
   const toggleProblemExpanded = useCallback((problemId: string) => {
     setExpandedProblems((current) => {
@@ -1349,23 +1453,30 @@ export default function App() {
         });
         upsertProblem(response.problem);
         setActiveProblem(response.problem);
+        syncFormFromProblem(response.problem);
       } else {
         const response = await api<{ problem: Problem }>("/api/problems", {
           method: "POST",
           body: JSON.stringify(payload),
         });
         appendProblem(response.problem);
+        setActiveProblem(response.problem);
+        syncFormFromProblem(response.problem);
       }
 
-      setDrawerOpen(false);
-      setActiveProblem(null);
-      setForm(emptyForm);
+      if (drawerOpen) {
+        setDrawerOpen(false);
+      }
+
+      if (!activeProblem) {
+        setForm(emptyForm);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save problem");
     } finally {
       setSaving(false);
     }
-  }, [activeProblem, appendProblem, form, setError, setSaving, setDrawerOpen, setActiveProblem, setForm, upsertProblem]);
+  }, [activeProblem, appendProblem, drawerOpen, form, setError, setSaving, setDrawerOpen, setActiveProblem, setForm, syncFormFromProblem, upsertProblem]);
 
   const updateStatus = useCallback(async (problem: Problem, nextStatus: Status) => {
     try {
@@ -1536,11 +1647,7 @@ export default function App() {
 
         <button
           className={`topic-card all-topics ${selectedTopic === "all" ? "active" : ""}`}
-          onClick={() => {
-            setSelectedTopic("all");
-            setStatusFilter("all");
-            setMobileSidebarOpen(false);
-          }}
+          onClick={() => focusTopicList("all", "all")}
         >
           <div>
             <span className="topic-name">All Topics</span>
@@ -1551,11 +1658,7 @@ export default function App() {
 
         <button
           className={`topic-card ${statusFilter === "revisit" ? "active" : ""}`}
-          onClick={() => {
-            setSelectedTopic("all");
-            setStatusFilter("revisit");
-            setMobileSidebarOpen(false);
-          }}
+          onClick={() => focusTopicList("all", "revisit")}
         >
           <div className="topic-dot revision-dot" />
           <div className="topic-copy">
@@ -1576,11 +1679,7 @@ export default function App() {
               <div key={topic._id} className="sidebar-topic-group">
                 <button
                   className={`topic-card ${active ? "active" : ""}`}
-                  onClick={() => {
-                    setSelectedTopic(topic._id);
-                    setStatusFilter("all");
-                    setMobileSidebarOpen(false);
-                  }}
+                  onClick={() => focusTopicList(topic._id, "all")}
                 >
                   <div className="topic-dot" style={{ background: topic.accent }} />
                   <div className="topic-copy">
@@ -1736,7 +1835,7 @@ export default function App() {
                         <span className="revision-priority-pill subtle">
                           {getRevisionQueueMeta(problem, state).label}
                         </span>
-                        <button className="revision-action ghost" onClick={() => openEditDrawer(problem)}>
+                        <button className="revision-action ghost" onClick={() => openStudyView(problem)}>
                           Open
                         </button>
                       </article>
@@ -1756,23 +1855,143 @@ export default function App() {
           </section>
         ) : null}
 
-        {!drawerOpen && activeProblem ? (
-          <section className="study-focus-section">
-            <div className="section-heading">
+        {activeProblem && !drawerOpen ? (
+          <section className="problem-workspace">
+            <div className="problem-workspace-head">
               <div>
-                <p className="panel-label">Study focus</p>
-                <h3>Last opened problem</h3>
+                <p className="panel-label">
+                  <SectionBadge icon="🧩" label="Problem workspace" tone="sky" />
+                </p>
+                <h3>{activeProblem.title}</h3>
+                <p className="section-note">
+                  {activeProblem.topic.name} · {activeProblem.platformName} · {activeProblem.difficulty}
+                </p>
               </div>
-              <span className="section-note">Visible here without reopening the drawer</span>
+
+              <div className="problem-workspace-actions">
+                <button className="secondary-btn" onClick={() => setActiveProblem(null)}>
+                  Back to list
+                </button>
+                <button className="secondary-btn" onClick={() => openProblemLink(activeProblem)}>
+                  Practice
+                </button>
+                <button className="secondary-btn" onClick={() => openEditDrawer(activeProblem)}>
+                  Full edit
+                </button>
+                <button className="primary-btn" disabled={saving} onClick={() => void saveProblem()}>
+                  {saving ? "Saving..." : "Save changes"}
+                </button>
+              </div>
             </div>
 
-            <div className="study-focus-grid">
-              <ProblemSummaryPanel problem={activeProblem} />
-              <ActiveRecallPanel problem={activeProblem} />
+            <div className="problem-workspace-grid">
+              <div className="problem-workspace-main">
+                <ProblemSummaryPanel problem={activeProblem} />
+
+                <div className="pattern-invariant-card">
+                  <p className="panel-label">
+                    <SectionBadge icon="🧠" label="Pattern + invariant" tone="sky" />
+                  </p>
+                  <div className="pattern-invariant-grid">
+                    <div>
+                      <span className="pattern-invariant-label">Pattern</span>
+                      <strong>{activeProblem.pattern?.trim() || "Not set yet"}</strong>
+                    </div>
+                    <div>
+                      <span className="pattern-invariant-label">Invariant</span>
+                      <strong>{activeProblem.invariant?.trim() || "Not set yet"}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="compare-approaches-card">
+                  <p className="panel-label">
+                    <SectionBadge icon="⚡" label="Compare approaches" tone="rose" />
+                  </p>
+                  <div className="compare-approaches-grid">
+                    <div>
+                      <span className="compare-label">Brute force</span>
+                      <strong>{activeProblem.compareBruteForce?.trim() || "Not set yet"}</strong>
+                    </div>
+                    <div>
+                      <span className="compare-label">Optimized</span>
+                      <strong>{activeProblem.compareOptimized?.trim() || "Not set yet"}</strong>
+                    </div>
+                    <div>
+                      <span className="compare-label">Why better</span>
+                      <strong>{activeProblem.compareWhyBetter?.trim() || "Not set yet"}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <section className="mistake-log-block">
+                  <p className="panel-label">
+                    <SectionBadge icon="📝" label="Notes" tone="amber" />
+                  </p>
+                  <div className="workspace-editor-grid">
+                    <label className="workspace-editor-field">
+                      <span className="study-note-label">Short note</span>
+                      <input
+                        value={form.shortNote}
+                        onChange={(event) => setForm({ ...form, shortNote: event.target.value })}
+                        placeholder="One-line takeaway"
+                      />
+                    </label>
+                    <label className="workspace-editor-field">
+                      <span className="study-note-label">Detailed notes</span>
+                      <textarea
+                        rows={7}
+                        value={form.longNote}
+                        onChange={(event) => setForm({ ...form, longNote: event.target.value })}
+                        placeholder="Write the explanation, key insight, or edge cases here"
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="mistake-log-block">
+                  <p className="panel-label">
+                    <SectionBadge icon="🚧" label="Mistake log" tone="gold" />
+                  </p>
+                  <div className="workspace-editor-grid">
+                    <label className="workspace-editor-field">
+                      <span className="study-note-label">What went wrong</span>
+                      <textarea
+                        rows={3}
+                        value={form.mistakeTrigger}
+                        onChange={(event) => setForm({ ...form, mistakeTrigger: event.target.value })}
+                        placeholder="Where you got stuck or made the mistake"
+                      />
+                    </label>
+                    <label className="workspace-editor-field">
+                      <span className="study-note-label">Why it happened</span>
+                      <textarea
+                        rows={3}
+                        value={form.mistakeReason}
+                        onChange={(event) => setForm({ ...form, mistakeReason: event.target.value })}
+                        placeholder="Wrong assumption, missed condition, or gap in understanding"
+                      />
+                    </label>
+                    <label className="workspace-editor-field">
+                      <span className="study-note-label">Fix / takeaway</span>
+                      <textarea
+                        rows={3}
+                        value={form.mistakeFix}
+                        onChange={(event) => setForm({ ...form, mistakeFix: event.target.value })}
+                        placeholder="What you will do differently next time"
+                      />
+                    </label>
+                  </div>
+                </section>
+              </div>
+
+              <div className="problem-workspace-side">
+                <ActiveRecallPanel problem={activeProblem} />
+              </div>
             </div>
           </section>
-        ) : null}
-
+        ) : (
+          <>
         <section className="filters">
           <input
             className="search-input"
@@ -1864,8 +2083,9 @@ export default function App() {
                                   canEdit={editMode}
                                   revisionStateMap={revisionStateMap}
                                   problemCategoryMap={problemCategoryMap}
-                              nowDate={nowDate}
-                              onToggleStatus={updateStatus}
+                                  nowDate={nowDate}
+                                  onOpenStudy={openStudyView}
+                                  onToggleStatus={updateStatus}
                                   onOpenEdit={openEditDrawer}
                                   onTogglePin={togglePin}
                                   onOpenLink={openProblemLink}
@@ -1887,7 +2107,8 @@ export default function App() {
                             revisionStateMap={revisionStateMap}
                             problemCategoryMap={problemCategoryMap}
                             nowDate={nowDate}
-                              onToggleStatus={updateStatus}
+                            onOpenStudy={openStudyView}
+                            onToggleStatus={updateStatus}
                             onOpenEdit={openEditDrawer}
                             onTogglePin={togglePin}
                             onOpenLink={openProblemLink}
@@ -1902,6 +2123,8 @@ export default function App() {
             </div>
           )}
         </section>
+          </>
+        )}
       </main>
 
       {drawerOpen ? (
@@ -2328,6 +2551,23 @@ function StatCard({ label, value, hint }: { label: string; value: number; hint: 
   );
 }
 
+function SectionBadge({
+  icon,
+  label,
+  tone,
+}: {
+  icon: string;
+  label: string;
+  tone: "gold" | "mint" | "sky" | "rose" | "amber";
+}) {
+  return (
+    <span className={`section-badge section-badge-${tone}`}>
+      <span>{icon}</span>
+      {label}
+    </span>
+  );
+}
+
 const ActiveRecallPanel = memo(function ActiveRecallPanel({ problem }: { problem: Problem }) {
   const [showHints, setShowHints] = useState(false);
   const prompts = useMemo(() => buildRecallPrompts(problem), [problem]);
@@ -2336,7 +2576,9 @@ const ActiveRecallPanel = memo(function ActiveRecallPanel({ problem }: { problem
     <section className="recall-panel">
       <div className="section-heading">
         <div>
-          <p className="panel-label">Active recall</p>
+          <p className="panel-label">
+            <SectionBadge icon="🎯" label="Active recall" tone="mint" />
+          </p>
           <h3>Answer before you reveal</h3>
         </div>
         <button className="secondary-btn recall-toggle" onClick={() => setShowHints((value) => !value)}>
@@ -2367,7 +2609,9 @@ const ProblemSummaryPanel = memo(function ProblemSummaryPanel({ problem }: { pro
     <section className="summary-template-card">
       <div className="section-heading">
         <div>
-          <p className="panel-label">Study summary</p>
+          <p className="panel-label">
+            <SectionBadge icon="✨" label="Study summary" tone="gold" />
+          </p>
           <h3>One-page memory sheet</h3>
         </div>
       </div>
