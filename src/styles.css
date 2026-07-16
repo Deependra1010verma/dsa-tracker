@@ -280,6 +280,7 @@ button {
 .hero,
 .stats-grid,
 .progress-panel,
+.activity-panel,
 .filters,
 .problem-list {
   margin-bottom: 20px;
@@ -561,6 +562,315 @@ button {
     radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 18%),
     rgba(10, 14, 28, 0.9);
   margin-bottom: 20px;
+}
+
+.activity-panel {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.92fr) minmax(0, 1.4fr);
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.14), transparent 20%),
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.14), transparent 18%),
+    linear-gradient(145deg, rgba(8, 13, 28, 0.96), rgba(5, 8, 19, 0.98));
+  overflow: hidden;
+}
+
+.activity-summary,
+.activity-heatmap-shell {
+  min-width: 0;
+}
+
+.activity-summary {
+  display: grid;
+  gap: 16px;
+}
+
+.activity-summary-copy h3,
+.activity-heatmap-heading h3 {
+  margin: 2px 0 0;
+  font-size: 1.28rem;
+  line-height: 1.1;
+}
+
+.activity-summary-copy .section-note {
+  margin: 10px 0 0;
+}
+
+.activity-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.activity-metric-card {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(191, 219, 254, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02)),
+    rgba(7, 12, 24, 0.72);
+}
+
+.activity-metric-card.strong {
+  border-color: rgba(34, 197, 94, 0.22);
+  background:
+    radial-gradient(circle at top left, rgba(34, 197, 94, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(7, 12, 24, 0.78);
+}
+
+.activity-metric-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.activity-metric-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.activity-metric-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.activity-heatmap-shell {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(191, 219, 254, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.activity-heatmap-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: end;
+}
+
+.activity-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.activity-legend-scale {
+  display: flex;
+  gap: 6px;
+}
+
+.activity-legend-scale i,
+.activity-cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.activity-heatmap-grid {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.activity-weekday-rail {
+  display: grid;
+  grid-template-rows: 20px repeat(7, 13px);
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  align-items: center;
+}
+
+.activity-weekday-rail span {
+  display: flex;
+  align-items: center;
+  height: 13px;
+}
+
+.activity-weeks {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.activity-week-column {
+  display: grid;
+  grid-template-rows: 20px repeat(7, 13px);
+  gap: 6px;
+  justify-items: center;
+  min-width: 13px;
+}
+
+.activity-month-label {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.activity-cell {
+  appearance: none;
+  padding: 0;
+  background: rgba(148, 163, 184, 0.12);
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    opacity 140ms ease;
+}
+
+.activity-cell:hover {
+  transform: scale(1.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.activity-level-0 {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.activity-level-1 {
+  background: rgba(56, 189, 248, 0.25);
+}
+
+.activity-level-2 {
+  background: rgba(34, 197, 94, 0.38);
+}
+
+.activity-level-3 {
+  background: rgba(250, 204, 21, 0.55);
+}
+
+.activity-level-4 {
+  background: rgba(249, 115, 22, 0.72);
+}
+
+.activity-cell.today {
+  outline: 1px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 2px;
+}
+
+.activity-cell.selected {
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.75),
+    0 0 0 4px rgba(56, 189, 248, 0.12);
+}
+
+.activity-cell.future {
+  opacity: 0.28;
+}
+
+.activity-detail-panel {
+  display: grid;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(191, 219, 254, 0.08);
+}
+
+.activity-detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.activity-detail-count {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #d7f4ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.activity-detail-list {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-detail-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(191, 219, 254, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  text-align: left;
+}
+
+.activity-detail-item:hover {
+  border-color: rgba(56, 189, 248, 0.28);
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.activity-detail-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.activity-detail-copy strong {
+  font-size: 0.94rem;
+  line-height: 1.25;
+}
+
+.activity-detail-copy span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.activity-kind-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.activity-kind-solved {
+  background: rgba(34, 197, 94, 0.14);
+  color: #bbf7d0;
+}
+
+.activity-kind-revision {
+  background: rgba(56, 189, 248, 0.14);
+  color: #bae6fd;
+}
+
+.activity-kind-revisit {
+  background: rgba(250, 204, 21, 0.14);
+  color: #fde68a;
+}
+
+.activity-empty-day {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px dashed rgba(191, 219, 254, 0.12);
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .revision-summary-strip {
@@ -1846,6 +2156,10 @@ textarea {
     gap: 12px;
   }
 
+  .activity-panel {
+    grid-template-columns: 1fr;
+  }
+
   .stat-card {
     display: flex;
     flex-direction: column;
@@ -1972,6 +2286,25 @@ textarea {
     padding: 16px;
   }
 
+  .activity-panel {
+    padding: 16px;
+  }
+
+  .activity-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .activity-heatmap-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .activity-detail-head,
+  .activity-detail-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .progress-meta {
     justify-content: flex-start;
     white-space: normal;
@@ -2012,6 +2345,16 @@ textarea {
   .auth-hero,
   .auth-card {
     border-radius: 24px;
+  }
+}
+
+@media (max-width: 560px) {
+  .activity-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-legend {
+    flex-wrap: wrap;
   }
 }
 

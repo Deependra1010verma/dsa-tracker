@@ -211,6 +211,49 @@ type SummaryItem = {
   value: string;
 };
 
+type ActivityKind = "solved" | "revision" | "revisit";
+
+type ActivityEntry = {
+  problemId: string;
+  problemTitle: string;
+  topicName: string;
+  difficulty: Difficulty;
+  platformName: string;
+  kind: ActivityKind;
+};
+
+type ActivityDayBucket = {
+  date: Date;
+  dateKey: string;
+  solved: number;
+  revision: number;
+  revisit: number;
+  total: number;
+  items: ActivityEntry[];
+  level: 0 | 1 | 2 | 3 | 4;
+  isToday: boolean;
+  isFuture: boolean;
+};
+
+type ActivityWeek = {
+  label: string;
+  days: ActivityDayBucket[];
+};
+
+type ActivityInsights = {
+  currentStreak: number;
+  bestStreak: number;
+  activeDays: number;
+  totalActivity: number;
+  solvedActivity: number;
+  revisionActivity: number;
+  revisitActivity: number;
+  todayCount: number;
+  thisWeekCount: number;
+  lastActiveLabel: string;
+  weeks: ActivityWeek[];
+};
+
 function buildRecallPrompts(problem: Problem): RecallPrompt[] {
   const tagSummary = problem.tags.length > 0 ? problem.tags.slice(0, 3).join(", ") : "look for the smallest useful state";
   const patternHint = problem.pattern?.trim() || problem.topic?.name || "infer the pattern from the constraints";
@@ -316,9 +359,256 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function fromDateKey(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, (month ?? 1) - 1, day ?? 1);
+}
+
+function getWeekdayIndex(date: Date) {
+  return (date.getDay() + 6) % 7;
+}
+
 function daysBetween(now: Date, target: Date) {
   const msPerDay = 24 * 60 * 60 * 1000;
   return Math.round((startOfDay(target).getTime() - startOfDay(now).getTime()) / msPerDay);
+}
+
+function formatActivityDate(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatActivityLevel(total: number, solved: number, revision: number, revisit: number): 0 | 1 | 2 | 3 | 4 {
+  if (total <= 0) {
+    return 0;
+  }
+
+  const weightedScore = solved * 2 + revision + revisit;
+  if (weightedScore >= 5 || total >= 4) {
+    return 4;
+  }
+  if (weightedScore >= 3 || total >= 3) {
+    return 3;
+  }
+  if (weightedScore >= 2 || total >= 2) {
+    return 2;
+  }
+  return 1;
+}
+
+function createEmptyInsights(weeksToShow: number, nowDate: Date): ActivityInsights {
+  const today = startOfDay(nowDate);
+  const currentWeekStart = addDays(today, -getWeekdayIndex(today));
+  const gridStart = addDays(currentWeekStart, -(weeksToShow - 1) * 7);
+  const weeks: ActivityWeek[] = [];
+
+  for (let weekIndex = 0; weekIndex < weeksToShow; weekIndex += 1) {
+    const weekStart = addDays(gridStart, weekIndex * 7);
+    weeks.push({
+      label: weekStart.toLocaleString("en-US", { month: "short" }),
+      days: Array.from({ length: 7 }, (_, dayIndex) => {
+        const date = addDays(weekStart, dayIndex);
+        const isToday = toDateKey(date) === toDateKey(today);
+        return {
+          date,
+          dateKey: toDateKey(date),
+          solved: 0,
+          revision: 0,
+          revisit: 0,
+          total: 0,
+          items: [],
+          level: 0,
+          isToday,
+          isFuture: startOfDay(date).getTime() > today.getTime(),
+        };
+      }),
+    });
+  }
+
+  return {
+    currentStreak: 0,
+    bestStreak: 0,
+    activeDays: 0,
+    totalActivity: 0,
+    solvedActivity: 0,
+    revisionActivity: 0,
+    revisitActivity: 0,
+    todayCount: 0,
+    thisWeekCount: 0,
+    lastActiveLabel: "No activity yet",
+    weeks,
+  };
+}
+
+function buildActivityInsights(problems: Problem[], nowDate: Date, weeksToShow = 16): ActivityInsights {
+  const empty = createEmptyInsights(weeksToShow, nowDate);
+  const activityMap = new Map<string, { solved: number; revision: number; revisit: number; total: number; items: ActivityEntry[] }>();
+  const today = startOfDay(nowDate);
+
+  const addActivity = (date: Date | null, kind: ActivityKind, problem: Problem) => {
+    if (!date) {
+      return;
+    }
+
+    const dateKey = toDateKey(startOfDay(date));
+    const bucket = activityMap.get(dateKey) ?? { solved: 0, revision: 0, revisit: 0, total: 0, items: [] };
+    bucket[kind] += 1;
+    bucket.total += 1;
+    bucket.items.push({
+      problemId: problem._id,
+      problemTitle: problem.title,
+      topicName: problem.topic.name,
+      difficulty: problem.difficulty,
+      platformName: problem.platformName,
+      kind,
+    });
+    activityMap.set(dateKey, bucket);
+  };
+
+  for (const problem of problems) {
+    const solvedAt = toValidDate(problem.solvedAt) ?? (problem.status === "solved" ? toValidDate(problem.updatedAt) : null);
+    const revisionAt = toValidDate(problem.lastRevisionAt) ?? toValidDate(problem.revisionCompletedAt);
+    const revisitAt = problem.status === "revisit" ? toValidDate(problem.revisitAt) : null;
+
+    const uniqueEvents = new Set<string>();
+    const register = (date: Date | null, kind: ActivityKind) => {
+      if (!date) {
+        return;
+      }
+      const key = `${kind}:${toDateKey(startOfDay(date))}`;
+      if (uniqueEvents.has(key)) {
+        return;
+      }
+      uniqueEvents.add(key);
+      addActivity(date, kind, problem);
+    };
+
+    register(solvedAt, "solved");
+    register(revisionAt, "revision");
+    register(revisitAt, "revisit");
+  }
+
+  if (activityMap.size === 0) {
+    return empty;
+  }
+
+  const orderedKeys = [...activityMap.keys()].sort();
+  const activeDateSet = new Set(orderedKeys);
+  let bestStreak = 0;
+  let rollingStreak = 0;
+  let previousDate: Date | null = null;
+
+  for (const key of orderedKeys) {
+    const currentDate = fromDateKey(key);
+    if (previousDate && daysBetween(previousDate, currentDate) === 1) {
+      rollingStreak += 1;
+    } else {
+      rollingStreak = 1;
+    }
+    bestStreak = Math.max(bestStreak, rollingStreak);
+    previousDate = currentDate;
+  }
+
+  let currentStreak = 0;
+  const todayKey = toDateKey(today);
+  const yesterdayKey = toDateKey(addDays(today, -1));
+  let streakCursor = activeDateSet.has(todayKey) ? today : activeDateSet.has(yesterdayKey) ? addDays(today, -1) : null;
+
+  while (streakCursor) {
+    const cursorKey = toDateKey(streakCursor);
+    if (!activeDateSet.has(cursorKey)) {
+      break;
+    }
+    currentStreak += 1;
+    streakCursor = addDays(streakCursor, -1);
+  }
+
+  const currentWeekStart = addDays(today, -getWeekdayIndex(today));
+  const gridStart = addDays(currentWeekStart, -(weeksToShow - 1) * 7);
+  const weeks: ActivityWeek[] = [];
+  let thisWeekCount = 0;
+
+  for (let weekIndex = 0; weekIndex < weeksToShow; weekIndex += 1) {
+    const weekStart = addDays(gridStart, weekIndex * 7);
+    const days: ActivityDayBucket[] = [];
+
+    for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+      const date = addDays(weekStart, dayIndex);
+      const dateKey = toDateKey(date);
+      const counts = activityMap.get(dateKey) ?? { solved: 0, revision: 0, revisit: 0, total: 0, items: [] };
+      const isFuture = startOfDay(date).getTime() > today.getTime();
+      const level = isFuture ? 0 : formatActivityLevel(counts.total, counts.solved, counts.revision, counts.revisit);
+      const isToday = dateKey === todayKey;
+
+      if (!isFuture && startOfDay(date).getTime() >= currentWeekStart.getTime()) {
+        thisWeekCount += counts.total;
+      }
+
+      days.push({
+        date,
+        dateKey,
+        solved: counts.solved,
+        revision: counts.revision,
+        revisit: counts.revisit,
+        total: counts.total,
+        items: [...counts.items].sort((left, right) => left.problemTitle.localeCompare(right.problemTitle)),
+        level,
+        isToday,
+        isFuture,
+      });
+    }
+
+    weeks.push({
+      label: weekStart.toLocaleString("en-US", { month: "short" }),
+      days,
+    });
+  }
+
+  const latestKey = orderedKeys[orderedKeys.length - 1];
+  const latestDate = fromDateKey(latestKey);
+  const latestDaysAgo = Math.max(daysBetween(latestDate, today), 0);
+  const latestBucket = activityMap.get(latestKey) ?? { solved: 0, revision: 0, revisit: 0, total: 0, items: [] };
+
+  let lastActiveLabel = "Active today";
+  if (latestDaysAgo === 1) {
+    lastActiveLabel = `Last active yesterday · ${latestBucket.total} item${latestBucket.total === 1 ? "" : "s"}`;
+  } else if (latestDaysAgo > 1) {
+    lastActiveLabel = `Last active ${formatActivityDate(latestDate)} · ${latestBucket.total} item${latestBucket.total === 1 ? "" : "s"}`;
+  }
+
+  const totals = [...activityMap.values()].reduce(
+    (acc, bucket) => {
+      acc.total += bucket.total;
+      acc.solved += bucket.solved;
+      acc.revision += bucket.revision;
+      acc.revisit += bucket.revisit;
+      return acc;
+    },
+    { total: 0, solved: 0, revision: 0, revisit: 0 }
+  );
+
+  return {
+    currentStreak,
+    bestStreak,
+    activeDays: orderedKeys.length,
+    totalActivity: totals.total,
+    solvedActivity: totals.solved,
+    revisionActivity: totals.revision,
+    revisitActivity: totals.revisit,
+    todayCount: activityMap.get(todayKey)?.total ?? 0,
+    thisWeekCount,
+    lastActiveLabel,
+    weeks,
+  };
 }
 
 function formatRevisionDueText(daysAway: number | null, isDue: boolean, isComplete: boolean) {
@@ -915,6 +1205,19 @@ export default function App() {
       skippedProblems: topicProblems.filter((problem) => problem.status === "skipped").length,
     };
   }, [problems, selectedTopic, stats]);
+
+  const activityScopeProblems = useMemo(() => {
+    if (selectedTopic === "all") {
+      return problems;
+    }
+
+    return problems.filter((problem) => problem.topic._id === selectedTopic);
+  }, [problems, selectedTopic]);
+
+  const activityInsights = useMemo(
+    () => buildActivityInsights(activityScopeProblems, nowDate),
+    [activityScopeProblems, nowDate]
+  );
 
   const problemCategoryMap = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -1917,6 +2220,17 @@ export default function App() {
           </section>
         ) : null}
 
+        <ActivityInsightsPanel
+          insights={activityInsights}
+          scopeLabel={selectedTopicData?.name ?? "All topics"}
+          onOpenProblem={(problemId) => {
+            const matchedProblem = problems.find((problem) => problem._id === problemId);
+            if (matchedProblem) {
+              openStudyView(matchedProblem);
+            }
+          }}
+        />
+
         {statusFilter === "revisit" && revisionProblems.length > 0 ? (
           <section className="revision-panel">
             <div className="section-heading revision-heading">
@@ -2716,6 +3030,184 @@ export default function App() {
   );
 
   return isAuthenticated ? dashboardView : authView;
+}
+
+function ActivityInsightsPanel({
+  insights,
+  scopeLabel,
+  onOpenProblem,
+}: {
+  insights: ActivityInsights;
+  scopeLabel: string;
+  onOpenProblem: (problemId: string) => void;
+}) {
+  const weekdayLabels = ["M", "T", "W", "T", "F", "S", "S"];
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  const allDays = useMemo(() => insights.weeks.flatMap((week) => week.days), [insights.weeks]);
+  const selectedDay =
+    allDays.find((day) => day.dateKey === selectedDateKey) ??
+    allDays.find((day) => day.isToday && !day.isFuture) ??
+    [...allDays].reverse().find((day) => day.total > 0) ??
+    allDays[allDays.length - 1] ??
+    null;
+
+  useEffect(() => {
+    if (!selectedDay) {
+      return;
+    }
+
+    if (selectedDateKey === null || !allDays.some((day) => day.dateKey === selectedDateKey)) {
+      setSelectedDateKey(selectedDay.dateKey);
+    }
+  }, [allDays, selectedDateKey, selectedDay]);
+
+  const eventLabels: Record<ActivityKind, string> = {
+    solved: "Solved",
+    revision: "Revision",
+    revisit: "Revisit",
+  };
+
+  return (
+    <section className="activity-panel">
+      <div className="activity-summary">
+        <div className="activity-summary-copy">
+          <p className="panel-label">Consistency</p>
+          <h3>{scopeLabel}</h3>
+          <p className="section-note">
+            {insights.lastActiveLabel}
+          </p>
+        </div>
+
+        <div className="activity-metrics-grid">
+          <article className="activity-metric-card strong">
+            <span>Current streak</span>
+            <strong>{insights.currentStreak}</strong>
+            <p>{insights.todayCount > 0 ? `${insights.todayCount} today` : "Keep it alive today"}</p>
+          </article>
+          <article className="activity-metric-card">
+            <span>Best streak</span>
+            <strong>{insights.bestStreak}</strong>
+            <p>{insights.thisWeekCount} this week</p>
+          </article>
+          <article className="activity-metric-card">
+            <span>Active days</span>
+            <strong>{insights.activeDays}</strong>
+            <p>{insights.totalActivity} total sessions</p>
+          </article>
+          <article className="activity-metric-card">
+            <span>Solved / Revise</span>
+            <strong>{insights.solvedActivity}/{insights.revisionActivity}</strong>
+            <p>{insights.revisitActivity} revisit marks</p>
+          </article>
+        </div>
+      </div>
+
+      <div className="activity-heatmap-shell">
+        <div className="activity-heatmap-heading">
+          <div>
+            <p className="panel-label">Activity heatmap</p>
+            <h3>Last {insights.weeks.length} weeks</h3>
+          </div>
+          <div className="activity-legend">
+            <span>Less</span>
+            <div className="activity-legend-scale">
+              <i className="activity-level-0" />
+              <i className="activity-level-1" />
+              <i className="activity-level-2" />
+              <i className="activity-level-3" />
+              <i className="activity-level-4" />
+            </div>
+            <span>More</span>
+          </div>
+        </div>
+
+        <div className="activity-heatmap-grid">
+          <div className="activity-weekday-rail" aria-hidden="true">
+            {weekdayLabels.map((label, index) => (
+              <span key={`${label}-${index}`}>{index % 2 === 0 ? label : ""}</span>
+            ))}
+          </div>
+
+          <div className="activity-weeks">
+            {insights.weeks.map((week, weekIndex) => (
+              <div key={`${week.label}-${weekIndex}`} className="activity-week-column">
+                <span className="activity-month-label">
+                  {weekIndex === 0 || insights.weeks[weekIndex - 1]?.days[0].date.getMonth() !== week.days[0].date.getMonth()
+                    ? week.label
+                    : ""}
+                </span>
+                {week.days.map((day) => {
+                  const title =
+                    `${formatActivityDate(day.date)}: ${day.total} item${day.total === 1 ? "" : "s"}` +
+                    (day.total > 0
+                      ? ` (${day.solved} solved, ${day.revision} revisions, ${day.revisit} revisit)`
+                      : "");
+
+                  return (
+                    <button
+                      key={day.dateKey}
+                      type="button"
+                      className={[
+                        "activity-cell",
+                        `activity-level-${day.level}`,
+                        selectedDay?.dateKey === day.dateKey ? "selected" : "",
+                        day.isToday ? "today" : "",
+                        day.isFuture ? "future" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      title={title}
+                      aria-label={title}
+                      onClick={() => setSelectedDateKey(day.dateKey)}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {selectedDay ? (
+          <div className="activity-detail-panel">
+            <div className="activity-detail-head">
+              <div>
+                <p className="panel-label">Day details</p>
+                <h3>{formatActivityDate(selectedDay.date)}</h3>
+              </div>
+              <span className="activity-detail-count">
+                {selectedDay.total} item{selectedDay.total === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            {selectedDay.total > 0 ? (
+              <div className="activity-detail-list">
+                {selectedDay.items.map((item) => (
+                  <button
+                    key={`${selectedDay.dateKey}-${item.kind}-${item.problemId}`}
+                    type="button"
+                    className="activity-detail-item"
+                    onClick={() => onOpenProblem(item.problemId)}
+                  >
+                    <div className="activity-detail-copy">
+                      <strong>{item.problemTitle}</strong>
+                      <span>
+                        {item.topicName} · {item.platformName} · {item.difficulty}
+                      </span>
+                    </div>
+                    <span className={`activity-kind-pill activity-kind-${item.kind}`}>
+                      {eventLabels[item.kind]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="activity-empty-day">No recorded practice on this day.</div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
 }
 
 function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
