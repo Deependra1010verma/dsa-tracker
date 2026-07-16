@@ -1,6 +1,7 @@
 export type ProblemStatus = "unsolved" | "solved" | "revisit" | "skipped";
 
 export type Difficulty = "Easy" | "Medium" | "Hard";
+export type ActivityKind = "solved" | "revision" | "revisit";
 
 export type TopicSeed = {
   name: string;

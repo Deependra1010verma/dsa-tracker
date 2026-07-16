@@ -3,9 +3,9 @@ import express, { type RequestHandler } from "express";
 import path from "path";
 import { existsSync } from "fs";
 import { connectDb } from "./db.js";
-import { Problem, Topic, topicSeeds } from "./models.js";
+import { Activity, Problem, Topic, topicSeeds } from "./models.js";
 import { problemSeeds } from "./seed.js";
-import type { ProblemStatus } from "./types.js";
+import type { ActivityKind, ProblemStatus } from "./types.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -31,6 +31,7 @@ async function initializeStorage() {
     await ensureSeedTopics();
     await ensureSeedProblems();
     await backfillRevisionSchedules();
+    await ensureActivityHistory();
     storageMode = "mongo";
     databaseReady = true;
     databaseError = "";
@@ -233,6 +234,14 @@ type MemoryProblem = {
   updatedAt: Date;
 };
 
+type MemoryActivity = {
+  _id: string;
+  problemId: string;
+  topicId: string;
+  kind: ActivityKind;
+  occurredAt: Date;
+};
+
 const memoryTopics: MemoryTopic[] = topicSeeds.map((seed) => ({
   _id: `topic:${seed.slug}`,
   name: seed.name,
@@ -301,9 +310,45 @@ function seedProblemToMemoryProblem(seed: (typeof problemSeeds)[number]): Memory
 }
 
 let memoryProblems: MemoryProblem[] = problemSeeds.map(seedProblemToMemoryProblem);
+let memoryActivities: MemoryActivity[] = [];
+
+for (const problem of memoryProblems) {
+  if (problem.solvedAt) {
+    appendMemoryActivity(problem, "solved", problem.solvedAt);
+  }
+  if (problem.revisitAt) {
+    appendMemoryActivity(problem, "revisit", problem.revisitAt);
+  }
+}
 
 function cloneMemoryTopic(topic: MemoryTopic) {
   return { ...topic };
+}
+
+function memoryActivityId(problemId: string, kind: ActivityKind, occurredAt: Date) {
+  return `activity:${problemId}:${kind}:${occurredAt.getTime()}`;
+}
+
+function appendMemoryActivity(problem: MemoryProblem, kind: ActivityKind, occurredAt: Date) {
+  const timestamp = coerceDate(occurredAt);
+  const activity: MemoryActivity = {
+    _id: memoryActivityId(problem._id, kind, timestamp),
+    problemId: problem._id,
+    topicId: problem.topic._id,
+    kind,
+    occurredAt: timestamp,
+  };
+
+  const duplicate = memoryActivities.some(
+    (entry) =>
+      entry.problemId === activity.problemId &&
+      entry.kind === activity.kind &&
+      Math.abs(entry.occurredAt.getTime() - activity.occurredAt.getTime()) < 1000
+  );
+
+  if (!duplicate) {
+    memoryActivities = [activity, ...memoryActivities];
+  }
 }
 
 function toMemoryProblemResponse(problem: MemoryProblem, brief = false) {
@@ -344,6 +389,29 @@ function toMemoryProblemResponse(problem: MemoryProblem, brief = false) {
   };
 
   return response;
+}
+
+function toMemoryActivityResponse(activity: MemoryActivity) {
+  const problem = memoryProblems.find((entry) => entry._id === activity.problemId);
+  if (!problem) {
+    return null;
+  }
+
+  return {
+    _id: activity._id,
+    kind: activity.kind,
+    occurredAt: activity.occurredAt,
+    problem: {
+      _id: problem._id,
+      title: problem.title,
+      difficulty: problem.difficulty,
+      platformName: problem.platformName,
+    },
+    topic: {
+      _id: problem.topic._id,
+      name: problem.topic.name,
+    },
+  };
 }
 
 function getMemoryTopicsWithCounts() {
@@ -578,6 +646,27 @@ function statusFromValue(value: unknown): ProblemStatus | "" {
     : "";
 }
 
+async function recordMongoActivity(problem: { _id: unknown; topic: unknown }, kind: ActivityKind, occurredAt: Date) {
+  const when = coerceDate(occurredAt);
+  const existing = await Activity.findOne({
+    problem: problem._id,
+    kind,
+    occurredAt: {
+      $gte: new Date(when.getTime() - 1000),
+      $lte: new Date(when.getTime() + 1000),
+    },
+  }).select("_id");
+
+  if (!existing) {
+    await Activity.create({
+      problem: problem._id,
+      topic: problem.topic,
+      kind,
+      occurredAt: when,
+    });
+  }
+}
+
 async function backfillRevisionSchedules() {
   const problems = await Problem.find({
     status: { $in: ["solved", "revisit"] },
@@ -587,6 +676,24 @@ async function backfillRevisionSchedules() {
   for (const problem of problems) {
     startRevisionSchedule(problem);
     await problem.save();
+  }
+}
+
+async function ensureActivityHistory() {
+  const problems = await Problem.find().select("_id topic solvedAt revisitAt lastRevisionAt revisionCompletedAt");
+
+  for (const problem of problems) {
+    if (problem.solvedAt) {
+      await recordMongoActivity(problem, "solved", problem.solvedAt);
+    }
+    if (problem.revisitAt) {
+      await recordMongoActivity(problem, "revisit", problem.revisitAt);
+    }
+    if (problem.revisionCompletedAt) {
+      await recordMongoActivity(problem, "revision", problem.revisionCompletedAt);
+    } else if (problem.lastRevisionAt && !problem.solvedAt && !problem.revisitAt) {
+      await recordMongoActivity(problem, "revision", problem.lastRevisionAt);
+    }
   }
 }
 
@@ -730,6 +837,41 @@ app.get(
 );
 
 app.get(
+  "/api/activity",
+  asyncHandler(async (req, res) => {
+    const topic = normalizeSearch(req.query.topic);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 5000);
+
+    if (storageMode === "memory") {
+      const activities = memoryActivities
+        .filter((activity) => !topic || activity.topicId === topic)
+        .slice()
+        .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+        .slice(0, limit)
+        .map(toMemoryActivityResponse)
+        .filter(Boolean);
+
+      res.json({ activities });
+      return;
+    }
+
+    const filter: Record<string, unknown> = {};
+    if (topic) {
+      filter.topic = topic;
+    }
+
+    const activities = await Activity.find(filter)
+      .sort({ occurredAt: -1 })
+      .limit(limit)
+      .populate("problem", "_id title difficulty platformName")
+      .populate("topic", "_id name")
+      .lean();
+
+    res.json({ activities });
+  })
+);
+
+app.get(
   "/api/stats",
   asyncHandler(async (_req, res) => {
     if (storageMode === "memory") {
@@ -849,6 +991,12 @@ app.post(
       };
 
       memoryProblems = [problem, ...memoryProblems.filter((entry) => entry._id !== problem._id)];
+      if (problem.solvedAt) {
+        appendMemoryActivity(problem, "solved", problem.solvedAt);
+      }
+      if (problem.revisitAt) {
+        appendMemoryActivity(problem, "revisit", problem.revisitAt);
+      }
       res.status(201).json({ problem: toMemoryProblemResponse(problem) });
       return;
     }
@@ -888,6 +1036,13 @@ app.post(
       lastRevisionAt: isSolvedLike ? now : undefined,
       nextRevisionAt: isSolvedLike ? addDays(now, spacedRevisionDays[0]) : undefined,
     });
+
+    if (created.solvedAt) {
+      await recordMongoActivity(created, "solved", created.solvedAt);
+    }
+    if (created.revisitAt) {
+      await recordMongoActivity(created, "revisit", created.revisitAt);
+    }
 
     const populated = await created.populate("topic");
     res.status(201).json({ problem: populated });
@@ -956,9 +1111,11 @@ app.patch(
 
       if (problem.status === "solved" && previousStatus !== "solved") {
         problem.solvedAt = now;
+        appendMemoryActivity(problem, "solved", now);
       }
       if (problem.status === "revisit" && previousStatus !== "revisit") {
         problem.revisitAt = now;
+        appendMemoryActivity(problem, "revisit", now);
       }
 
       memoryProblems[problemIndex] = problem;
@@ -1018,9 +1175,11 @@ app.patch(
 
     if (problem.status === "solved" && previousStatus !== "solved") {
       problem.solvedAt = now;
+      await recordMongoActivity(problem, "solved", now);
     }
     if (problem.status === "revisit" && previousStatus !== "revisit") {
       problem.revisitAt = now;
+      await recordMongoActivity(problem, "revisit", now);
     }
 
     await problem.save();
@@ -1052,6 +1211,7 @@ app.post(
       }
 
       problem.updatedAt = new Date();
+      appendMemoryActivity(problem, "revision", problem.lastRevisionAt ?? problem.updatedAt);
       memoryProblems[problemIndex] = problem;
       res.json({ problem: toMemoryProblemResponse(problem) });
       return;
@@ -1075,6 +1235,7 @@ app.post(
     }
 
     await problem.save();
+    await recordMongoActivity(problem, "revision", problem.lastRevisionAt ?? new Date());
     const populated = await problem.populate("topic");
     res.json({ problem: populated });
   })
@@ -1090,6 +1251,7 @@ app.delete(
         return;
       }
 
+      memoryActivities = memoryActivities.filter((entry) => entry.problemId !== req.params.id);
       memoryProblems = nextProblems;
       res.json({ message: "Problem deleted" });
       return;
@@ -1100,6 +1262,8 @@ app.delete(
       res.status(404).json({ message: "Problem not found" });
       return;
     }
+
+    await Activity.deleteMany({ problem: req.params.id });
 
     res.json({ message: "Problem deleted" });
   })

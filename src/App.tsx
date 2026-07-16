@@ -213,9 +213,26 @@ type SummaryItem = {
 
 type ActivityKind = "solved" | "revision" | "revisit";
 
+type ActivityRecord = {
+  _id: string;
+  kind: ActivityKind;
+  occurredAt: string;
+  problem: {
+    _id: string;
+    title: string;
+    difficulty: Difficulty;
+    platformName: string;
+  };
+  topic: {
+    _id: string;
+    name: string;
+  };
+};
+
 type ActivityEntry = {
   problemId: string;
   problemTitle: string;
+  topicId: string;
   topicName: string;
   difficulty: Difficulty;
   platformName: string;
@@ -449,52 +466,34 @@ function createEmptyInsights(weeksToShow: number, nowDate: Date): ActivityInsigh
   };
 }
 
-function buildActivityInsights(problems: Problem[], nowDate: Date, weeksToShow = 16): ActivityInsights {
+function buildActivityInsights(activities: ActivityRecord[], nowDate: Date, weeksToShow = 16): ActivityInsights {
   const empty = createEmptyInsights(weeksToShow, nowDate);
   const activityMap = new Map<string, { solved: number; revision: number; revisit: number; total: number; items: ActivityEntry[] }>();
   const today = startOfDay(nowDate);
 
-  const addActivity = (date: Date | null, kind: ActivityKind, problem: Problem) => {
+  const addActivity = (date: Date | null, activity: ActivityRecord) => {
     if (!date) {
       return;
     }
 
     const dateKey = toDateKey(startOfDay(date));
     const bucket = activityMap.get(dateKey) ?? { solved: 0, revision: 0, revisit: 0, total: 0, items: [] };
-    bucket[kind] += 1;
+    bucket[activity.kind] += 1;
     bucket.total += 1;
     bucket.items.push({
-      problemId: problem._id,
-      problemTitle: problem.title,
-      topicName: problem.topic.name,
-      difficulty: problem.difficulty,
-      platformName: problem.platformName,
-      kind,
+      problemId: activity.problem._id,
+      problemTitle: activity.problem.title,
+      topicId: activity.topic._id,
+      topicName: activity.topic.name,
+      difficulty: activity.problem.difficulty,
+      platformName: activity.problem.platformName,
+      kind: activity.kind,
     });
     activityMap.set(dateKey, bucket);
   };
 
-  for (const problem of problems) {
-    const solvedAt = toValidDate(problem.solvedAt) ?? (problem.status === "solved" ? toValidDate(problem.updatedAt) : null);
-    const revisionAt = toValidDate(problem.lastRevisionAt) ?? toValidDate(problem.revisionCompletedAt);
-    const revisitAt = problem.status === "revisit" ? toValidDate(problem.revisitAt) : null;
-
-    const uniqueEvents = new Set<string>();
-    const register = (date: Date | null, kind: ActivityKind) => {
-      if (!date) {
-        return;
-      }
-      const key = `${kind}:${toDateKey(startOfDay(date))}`;
-      if (uniqueEvents.has(key)) {
-        return;
-      }
-      uniqueEvents.add(key);
-      addActivity(date, kind, problem);
-    };
-
-    register(solvedAt, "solved");
-    register(revisionAt, "revision");
-    register(revisitAt, "revisit");
+  for (const activity of activities) {
+    addActivity(toValidDate(activity.occurredAt), activity);
   }
 
   if (activityMap.size === 0) {
@@ -1141,6 +1140,7 @@ export default function App() {
   const [loginError, setLoginError] = useState("");
   const [topics, setTopics] = useState<Topic[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
+  const [activities, setActivities] = useState<ActivityRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState(persistedViewState.search ?? "");
@@ -1206,17 +1206,17 @@ export default function App() {
     };
   }, [problems, selectedTopic, stats]);
 
-  const activityScopeProblems = useMemo(() => {
+  const activityScopeRecords = useMemo(() => {
     if (selectedTopic === "all") {
-      return problems;
+      return activities;
     }
 
-    return problems.filter((problem) => problem.topic._id === selectedTopic);
-  }, [problems, selectedTopic]);
+    return activities.filter((activity) => activity.topic._id === selectedTopic);
+  }, [activities, selectedTopic]);
 
   const activityInsights = useMemo(
-    () => buildActivityInsights(activityScopeProblems, nowDate),
-    [activityScopeProblems, nowDate]
+    () => buildActivityInsights(activityScopeRecords, nowDate),
+    [activityScopeRecords, nowDate]
   );
 
   const problemCategoryMap = useMemo(() => {
@@ -1241,12 +1241,14 @@ export default function App() {
         setLoading(true);
       }
       setError("");
-      const [topicsRes, problemsRes] = await Promise.all([
+      const [topicsRes, problemsRes, activitiesRes] = await Promise.all([
         api<{ topics: Topic[] }>("/api/topics"),
         api<{ problems: Problem[] }>("/api/problems?brief=1"),
+        api<{ activities: ActivityRecord[] }>("/api/activity?limit=5000"),
       ]);
       setTopics(topicsRes.topics);
       setProblems(problemsRes.problems);
+      setActivities(activitiesRes.activities);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -1778,6 +1780,7 @@ export default function App() {
       if (!activeProblem && !options?.keepWorkspaceOpen) {
         setForm(emptyForm);
       }
+      void loadData({ silent: true });
       setWorkspaceSaveState("saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save problem");
@@ -1932,6 +1935,7 @@ export default function App() {
       if (activeProblem?._id === problem._id) {
         setActiveProblem(response.problem);
       }
+      void loadData({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update status");
     }
@@ -1946,6 +1950,7 @@ export default function App() {
       if (activeProblem?._id === problem._id) {
         setActiveProblem(response.problem);
       }
+      void loadData({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update revision schedule");
     }
@@ -1959,6 +1964,7 @@ export default function App() {
         setDrawerOpen(false);
         setActiveProblem(null);
       }
+      void loadData({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete problem");
     }
@@ -2229,6 +2235,13 @@ export default function App() {
               openStudyView(matchedProblem);
             }
           }}
+          onCompleteRevision={(problemId) => {
+            const matchedProblem = problems.find((problem) => problem._id === problemId);
+            if (matchedProblem) {
+              void completeRevision(matchedProblem);
+            }
+          }}
+          onFilterTopic={(topicId) => focusTopicList(topicId, "all")}
         />
 
         {statusFilter === "revisit" && revisionProblems.length > 0 ? (
@@ -3036,10 +3049,14 @@ function ActivityInsightsPanel({
   insights,
   scopeLabel,
   onOpenProblem,
+  onCompleteRevision,
+  onFilterTopic,
 }: {
   insights: ActivityInsights;
   scopeLabel: string;
   onOpenProblem: (problemId: string) => void;
+  onCompleteRevision: (problemId: string) => void;
+  onFilterTopic: (topicId: string) => void;
 }) {
   const weekdayLabels = ["M", "T", "W", "T", "F", "S", "S"];
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
@@ -3066,6 +3083,55 @@ function ActivityInsightsPanel({
     revision: "Revision",
     revisit: "Revisit",
   };
+  const groupedSelectedItems = useMemo(() => {
+    if (!selectedDay) {
+      return [];
+    }
+
+    const grouped = new Map<
+      string,
+      {
+        problemId: string;
+        problemTitle: string;
+        topicId: string;
+        topicName: string;
+        difficulty: Difficulty;
+        platformName: string;
+        kinds: ActivityKind[];
+      }
+    >();
+
+    for (const item of selectedDay.items) {
+      const existing = grouped.get(item.problemId);
+      if (existing) {
+        if (!existing.kinds.includes(item.kind)) {
+          existing.kinds.push(item.kind);
+        }
+        continue;
+      }
+
+      grouped.set(item.problemId, {
+        problemId: item.problemId,
+        problemTitle: item.problemTitle,
+        topicId: item.topicId,
+        topicName: item.topicName,
+        difficulty: item.difficulty,
+        platformName: item.platformName,
+        kinds: [item.kind],
+      });
+    }
+
+    return [...grouped.values()].sort((left, right) => left.problemTitle.localeCompare(right.problemTitle));
+  }, [selectedDay]);
+  const needsTodayAction = insights.todayCount === 0;
+  const streakGuardMessage =
+    insights.currentStreak > 0
+      ? needsTodayAction
+        ? `You are on a ${insights.currentStreak}-day streak. One focused session today keeps it alive.`
+        : `Streak protected for today. ${insights.currentStreak} days and counting.`
+      : needsTodayAction
+      ? "No active streak yet. Solve or revise one problem today to start one."
+      : "Strong start. Today's work has already started your next streak.";
 
   return (
     <section className="activity-panel">
@@ -3100,6 +3166,12 @@ function ActivityInsightsPanel({
             <p>{insights.revisitActivity} revisit marks</p>
           </article>
         </div>
+
+        <article className={`streak-guard-card ${needsTodayAction ? "needs-action" : "safe"}`}>
+          <span className="streak-guard-label">Streak guard</span>
+          <strong>{needsTodayAction ? "Protect today" : "Covered today"}</strong>
+          <p>{streakGuardMessage}</p>
+        </article>
       </div>
 
       <div className="activity-heatmap-shell">
@@ -3181,23 +3253,39 @@ function ActivityInsightsPanel({
 
             {selectedDay.total > 0 ? (
               <div className="activity-detail-list">
-                {selectedDay.items.map((item) => (
-                  <button
-                    key={`${selectedDay.dateKey}-${item.kind}-${item.problemId}`}
-                    type="button"
-                    className="activity-detail-item"
-                    onClick={() => onOpenProblem(item.problemId)}
-                  >
+                {groupedSelectedItems.map((item) => (
+                  <article key={`${selectedDay.dateKey}-${item.problemId}`} className="activity-detail-item">
                     <div className="activity-detail-copy">
                       <strong>{item.problemTitle}</strong>
                       <span>
                         {item.topicName} · {item.platformName} · {item.difficulty}
                       </span>
+                      <div className="activity-kind-row">
+                        {item.kinds.map((kind) => (
+                          <span key={`${item.problemId}-${kind}`} className={`activity-kind-pill activity-kind-${kind}`}>
+                            {eventLabels[kind]}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <span className={`activity-kind-pill activity-kind-${item.kind}`}>
-                      {eventLabels[item.kind]}
-                    </span>
-                  </button>
+                    <div className="activity-detail-actions">
+                      <button type="button" className="secondary-btn activity-action-btn" onClick={() => onOpenProblem(item.problemId)}>
+                        Open
+                      </button>
+                      <button type="button" className="secondary-btn activity-action-btn" onClick={() => onFilterTopic(item.topicId)}>
+                        Topic
+                      </button>
+                      {item.kinds.includes("revision") || item.kinds.includes("revisit") || item.kinds.includes("solved") ? (
+                        <button
+                          type="button"
+                          className="primary-btn activity-action-btn"
+                          onClick={() => onCompleteRevision(item.problemId)}
+                        >
+                          Revise done
+                        </button>
+                      ) : null}
+                    </div>
+                  </article>
                 ))}
               </div>
             ) : (

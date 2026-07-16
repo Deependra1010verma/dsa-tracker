@@ -62,9 +62,29 @@ const problemSchema = new mongoose.Schema(
 
 problemSchema.index({ title: "text", shortNote: "text", longNote: "text", platformName: "text" });
 
+const activitySchema = new mongoose.Schema(
+  {
+    problem: { type: mongoose.Schema.Types.ObjectId, ref: "Problem", required: true, index: true },
+    topic: { type: mongoose.Schema.Types.ObjectId, ref: "Topic", required: true, index: true },
+    kind: {
+      type: String,
+      enum: ["solved", "revision", "revisit"],
+      required: true,
+      index: true,
+    },
+    occurredAt: { type: Date, required: true, index: true },
+  },
+  { timestamps: true }
+);
+
+activitySchema.index({ problem: 1, kind: 1, occurredAt: 1 });
+
 const TopicModel = mongoose.model("Topic", topicSchema);
 export const Topic = (mongoose.models.Topic as typeof TopicModel) || TopicModel;
 
 const ProblemModel = mongoose.model("Problem", problemSchema);
 export const Problem = (mongoose.models.Problem as typeof ProblemModel) || ProblemModel;
+
+const ActivityModel = mongoose.model("Activity", activitySchema);
+export const Activity = (mongoose.models.Activity as typeof ActivityModel) || ActivityModel;
 export { topicSeeds };
