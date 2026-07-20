@@ -2117,26 +2117,26 @@ export default function App() {
         </div>
 
         <div style={{ padding: "0 1rem", marginBottom: "1rem", marginTop: "-0.5rem" }}>
-          <select
-            value={selectedProblemSet}
-            onChange={(e) => setSelectedProblemSet(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "0.5rem 0.75rem",
-              borderRadius: "0.5rem",
-              backgroundColor: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              color: "var(--color-text)",
-              outline: "none",
-              fontSize: "0.85rem",
-              cursor: "pointer",
-            }}
-          >
-            <option value="set1">Main List (Set 1)</option>
-            <option value="set2">Problem Set 2</option>
-            <option value="set3">Problem Set 3</option>
-          </select>
-        </div>
+            <select
+              value={selectedProblemSet}
+              onChange={(e) => setSelectedProblemSet(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "0.5rem 0.75rem",
+                borderRadius: "0.5rem",
+                backgroundColor: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "var(--text)",
+                outline: "none",
+                fontSize: "0.85rem",
+                cursor: "pointer",
+              }}
+            >
+              <option value="set1" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>Main List (Set 1)</option>
+              <option value="set2" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>Problem Set 2</option>
+              <option value="set3" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>Problem Set 3</option>
+            </select>
+          </div>
 
         <button
           className={`topic-card all-topics ${selectedTopic === "all" ? "active" : ""}`}
