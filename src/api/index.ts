@@ -5,7 +5,20 @@ import { existsSync } from "fs";
 import { connectDb } from "./db.js";
 import { Activity, Problem, Topic, topicSeeds } from "./models.js";
 import { problemSeeds } from "./seed.js";
+import { problemSeeds2, topicSeeds2 } from "./seed2.js";
+import { problemSeeds3, topicSeeds3 } from "./seed3.js";
 import type { ActivityKind, ProblemStatus } from "./types.js";
+
+const allTopicSeeds = [
+  ...topicSeeds.map(t => ({ ...t, problemSet: "set1" })),
+  ...topicSeeds2.map(t => ({ ...t, problemSet: "set2" })),
+  ...topicSeeds3.map(t => ({ ...t, problemSet: "set3" }))
+];
+const allProblemSeeds = [
+  ...problemSeeds.map(p => ({ ...p, problemSet: "set1" })),
+  ...problemSeeds2.map(p => ({ ...p, problemSet: "set2" })),
+  ...problemSeeds3.map(p => ({ ...p, problemSet: "set3" }))
+];
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -189,6 +202,7 @@ type MemoryTopic = {
   _id: string;
   name: string;
   slug: string;
+  problemSet: string;
   order: number;
   targetCount: number;
   description: string;
@@ -242,10 +256,11 @@ type MemoryActivity = {
   occurredAt: Date;
 };
 
-const memoryTopics: MemoryTopic[] = topicSeeds.map((seed) => ({
+const memoryTopics: MemoryTopic[] = allTopicSeeds.map((seed) => ({
   _id: `topic:${seed.slug}`,
   name: seed.name,
   slug: seed.slug,
+  problemSet: seed.problemSet,
   order: seed.order,
   targetCount: seed.targetCount,
   description: seed.description,
@@ -259,7 +274,7 @@ function memoryProblemId(topicSlug: string, title: string) {
   return `problem:${problemKeyForSeed(topicSlug, title)}`;
 }
 
-function seedProblemToMemoryProblem(seed: (typeof problemSeeds)[number]): MemoryProblem {
+function seedProblemToMemoryProblem(seed: (typeof allProblemSeeds)[number]): MemoryProblem {
   const topic = memoryTopicsBySlug.get(seed.topicSlug);
   if (!topic) {
     throw new Error(`Missing topic seed for ${seed.topicSlug}`);
@@ -309,7 +324,7 @@ function seedProblemToMemoryProblem(seed: (typeof problemSeeds)[number]): Memory
   };
 }
 
-let memoryProblems: MemoryProblem[] = problemSeeds.map(seedProblemToMemoryProblem);
+let memoryProblems: MemoryProblem[] = allProblemSeeds.map(seedProblemToMemoryProblem);
 let memoryActivities: MemoryActivity[] = [];
 
 for (const problem of memoryProblems) {
@@ -479,13 +494,14 @@ function sortMemoryProblems(left: MemoryProblem, right: MemoryProblem) {
 }
 
 async function ensureSeedTopics() {
-  const operations = topicSeeds.map((seed) => ({
+  const operations = allTopicSeeds.map((seed) => ({
     updateOne: {
       filter: { slug: seed.slug },
       update: {
         $set: {
           name: seed.name,
           order: seed.order,
+          problemSet: seed.problemSet,
           targetCount: seed.targetCount,
           description: seed.description,
           accent: seed.accent,
@@ -504,11 +520,11 @@ async function ensureSeedTopics() {
 }
 
 async function ensureSeedProblems() {
-  const topics = await Topic.find({ slug: { $in: problemSeeds.map((seed) => seed.topicSlug) } });
+  const topics = await Topic.find({ slug: { $in: allProblemSeeds.map((seed) => seed.topicSlug) } });
   const topicsBySlug = new Map(topics.map((topic) => [topic.slug, topic._id]));
   const topicIds = topics.map((topic) => topic._id);
 
-  const seededDefinitions = problemSeeds
+  const seededDefinitions = allProblemSeeds
     .map((seed) => {
       const topicId = topicsBySlug.get(seed.topicSlug);
       if (!topicId) {
@@ -570,6 +586,7 @@ async function ensureSeedProblems() {
           $set: {
             problemKey: seed.problemKey,
             isSeeded: true,
+            problemSet: seed.problemSet,
             roadmapSection: seed.roadmapSection ?? "",
             roadmapSectionOrder: seed.roadmapSectionOrder ?? 999,
             roadmapOrder: seed.roadmapOrder ?? 999,
@@ -599,6 +616,7 @@ async function ensureSeedProblems() {
         $set: {
           problemKey: seed.problemKey,
           isSeeded: true,
+          problemSet: seed.problemSet,
           platformName: seed.platformName,
           platformUrl: seed.platformUrl,
           roadmapSection: seed.roadmapSection ?? "",
@@ -699,14 +717,16 @@ async function ensureActivityHistory() {
 
 app.get(
   "/api/topics",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const problemSet = normalizeSearch(req.query.set) || "set1";
+
     if (storageMode === "memory") {
-      res.json({ topics: getMemoryTopicsWithCounts() });
+      res.json({ topics: getMemoryTopicsWithCounts().filter(t => t.problemSet === problemSet) });
       return;
     }
 
     const [topics, counts] = await Promise.all([
-      Topic.find().sort({ order: 1 }).lean(),
+      Topic.find({ problemSet }).sort({ order: 1 }).lean(),
       Problem.aggregate([
         {
           $group: {
@@ -741,6 +761,7 @@ app.get(
 app.get(
   "/api/problems",
   asyncHandler(async (req, res) => {
+    const problemSet = normalizeSearch(req.query.set) || "set1";
     const topic = normalizeSearch(req.query.topic);
     const search = normalizeSearch(req.query.search);
     const difficulty = normalizeSearch(req.query.difficulty);
@@ -750,7 +771,8 @@ app.get(
     if (storageMode === "memory") {
       const problems = memoryProblems
         .filter((problem) => {
-          const matchesTopic = !topic || problem.topic._id === topic;
+          if (problem.topic.problemSet !== problemSet) return false;
+          const matchesTopic = !topic || problem.topic._id === topic || problem.topic.slug === topic;
           const matchesDifficulty = !difficulty || problem.difficulty === difficulty;
           const matchesStatus = !status || problem.status === status;
           return matchesTopic && matchesDifficulty && matchesStatus && matchesMemorySearch(problem, search);
@@ -763,7 +785,7 @@ app.get(
       return;
     }
 
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { problemSet };
     if (topic) {
       filter.topic = topic;
     }

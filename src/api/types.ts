@@ -6,6 +6,7 @@ export type ActivityKind = "solved" | "revision" | "revisit";
 export type TopicSeed = {
   name: string;
   slug: string;
+  problemSet?: string;
   order: number;
   targetCount: number;
   description: string;
@@ -15,6 +16,7 @@ export type TopicSeed = {
 export type ProblemSeed = {
   title: string;
   topicSlug: string;
+  problemSet?: string;
   roadmapSection?: string;
   roadmapSectionOrder?: number;
   roadmapOrder?: number;

@@ -1081,6 +1081,7 @@ type PersistedViewState = {
   statusFilter?: Status | "all" | "revisit";
   difficultyFilter?: Difficulty | "all";
   selectedTopic?: string;
+  selectedProblemSet?: string;
   activeProblemId?: string | null;
   drawerOpen?: boolean;
   drawerMode?: "edit" | "notes";
@@ -1147,8 +1148,19 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<Status | "all" | "revisit">(persistedViewState.statusFilter ?? "all");
   const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">(persistedViewState.difficultyFilter ?? "all");
   const [selectedTopic, setSelectedTopic] = useState<string>(persistedViewState.selectedTopic ?? "all");
+  const [selectedProblemSet, setSelectedProblemSet] = useState<string>(persistedViewState.selectedProblemSet ?? "set1");
   const [drawerOpen, setDrawerOpen] = useState(Boolean(persistedViewState.activeProblemId && persistedViewState.drawerOpen));
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
+
+  useEffect(() => {
+    if (didInitialLoadRef.current) {
+      void loadData({ silent: false });
+    }
+    setSelectedTopic("all");
+    setDrawerOpen(false);
+    setActiveProblem(null);
+  }, [selectedProblemSet]);
+
   const [drawerMode, setDrawerMode] = useState<"edit" | "notes">(persistedViewState.drawerMode ?? "notes");
   const [editMode, setEditMode] = useState(false);
   const [expandedProblems, setExpandedProblems] = useState<Set<string>>(() => new Set());
@@ -1235,20 +1247,28 @@ export default function App() {
     return map;
   }, [nowDate, problems]);
 
+  const handleSilentRefresh = useCallback(async () => {
+    try {
+      const [topicsRes, problemsRes, activitiesRes] = await Promise.all([
+        api<{ topics: Topic[] }>(`/api/topics?set=${selectedProblemSet}`),
+        api<{ problems: Problem[] }>(`/api/problems?brief=1&set=${selectedProblemSet}`),
+        api<{ activities: ActivityRecord[] }>(`/api/activity?limit=5000&set=${selectedProblemSet}`),
+      ]);
+      setTopics(topicsRes.topics);
+      setProblems(problemsRes.problems);
+      setActivities(activitiesRes.activities);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    }
+  }, [selectedProblemSet]);
+
   async function loadData(options?: { silent?: boolean }) {
     try {
       if (!options?.silent) {
         setLoading(true);
       }
       setError("");
-      const [topicsRes, problemsRes, activitiesRes] = await Promise.all([
-        api<{ topics: Topic[] }>("/api/topics"),
-        api<{ problems: Problem[] }>("/api/problems?brief=1"),
-        api<{ activities: ActivityRecord[] }>("/api/activity?limit=5000"),
-      ]);
-      setTopics(topicsRes.topics);
-      setProblems(problemsRes.problems);
-      setActivities(activitiesRes.activities);
+      await handleSilentRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -1333,13 +1353,14 @@ export default function App() {
       statusFilter,
       difficultyFilter,
       selectedTopic,
+      selectedProblemSet,
       activeProblemId: activeProblem?._id ?? null,
       drawerOpen,
       drawerMode,
     };
 
     window.localStorage.setItem(APP_VIEW_STATE_KEY, JSON.stringify(nextState));
-  }, [activeProblem?._id, difficultyFilter, drawerMode, drawerOpen, isAuthenticated, search, selectedTopic, statusFilter]);
+  }, [activeProblem?._id, difficultyFilter, drawerMode, drawerOpen, isAuthenticated, search, selectedTopic, selectedProblemSet, statusFilter]);
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -2093,6 +2114,28 @@ export default function App() {
             <h1>Tracker</h1>
             <p>Problems and notes.</p>
           </div>
+        </div>
+
+        <div style={{ padding: "0 1rem", marginBottom: "1rem", marginTop: "-0.5rem" }}>
+          <select
+            value={selectedProblemSet}
+            onChange={(e) => setSelectedProblemSet(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "0.5rem 0.75rem",
+              borderRadius: "0.5rem",
+              backgroundColor: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "var(--color-text)",
+              outline: "none",
+              fontSize: "0.85rem",
+              cursor: "pointer",
+            }}
+          >
+            <option value="set1">Main List (Set 1)</option>
+            <option value="set2">Problem Set 2</option>
+            <option value="set3">Problem Set 3</option>
+          </select>
         </div>
 
         <button

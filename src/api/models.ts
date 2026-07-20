@@ -3,8 +3,9 @@ import { topicSeeds } from "./seed.js";
 
 const topicSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
     slug: { type: String, required: true, unique: true },
+    problemSet: { type: String, required: true, default: "set1", index: true },
     order: { type: Number, required: true },
     targetCount: { type: Number, required: true },
     description: { type: String, required: true },
@@ -19,6 +20,7 @@ const problemSchema = new mongoose.Schema(
     isSeeded: { type: Boolean, default: false, index: true },
     title: { type: String, required: true },
     topic: { type: mongoose.Schema.Types.ObjectId, ref: "Topic", required: true },
+    problemSet: { type: String, required: true, default: "set1", index: true },
     platformName: { type: String, required: true },
     platformUrl: { type: String, required: true },
     roadmapSection: { type: String, default: "" },
