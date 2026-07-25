@@ -2591,8 +2591,6 @@ export default function App() {
 
             <div className="problem-workspace-grid">
               <div className="problem-workspace-main">
-                <ProblemSummaryPanel form={form} onChange={setForm} />
-
                 <section className="mistake-log-block">
                   <p className="panel-label">
                     <SectionBadge icon="📝" label="Notes" tone="amber" />
@@ -3715,83 +3713,4 @@ const PatternFamilySection = memo(function PatternFamilySection({
   );
 });
 
-const ProblemSummaryPanel = memo(function ProblemSummaryPanel({
-  form,
-  onChange,
-}: {
-  form: ProblemFormState;
-  onChange: (nextForm: ProblemFormState) => void;
-}) {
-  return (
-    <section className="summary-template-card">
-      <div className="section-heading">
-        <div>
-          <p className="panel-label">
-            <SectionBadge icon="✨" label="Study summary" tone="gold" />
-          </p>
-          <h3>One-page memory sheet</h3>
-        </div>
-      </div>
 
-      <p className="section-note">
-        This is a compact recap of the problem using the fields you already filled in, so review stays fast.
-      </p>
-
-      <div className="summary-template-grid">
-        <label className="summary-template-item">
-          <span>Pattern</span>
-          <input
-            value={form.pattern}
-            onChange={(event) => onChange({ ...form, pattern: event.target.value })}
-            placeholder="Two pointers, DP, graph..."
-          />
-        </label>
-        <label className="summary-template-item">
-          <span>Optimized idea</span>
-          <textarea
-            rows={4}
-            value={form.compareOptimized}
-            onChange={(event) => onChange({ ...form, compareOptimized: event.target.value })}
-            placeholder="What you changed to improve it"
-          />
-        </label>
-        <label className="summary-template-item">
-          <span>Why better</span>
-          <textarea
-            rows={4}
-            value={form.compareWhyBetter}
-            onChange={(event) => onChange({ ...form, compareWhyBetter: event.target.value })}
-            placeholder="Why the optimized version wins"
-          />
-        </label>
-        <label className="summary-template-item">
-          <span>Mistake</span>
-          <textarea
-            rows={4}
-            value={form.mistakeTrigger}
-            onChange={(event) => onChange({ ...form, mistakeTrigger: event.target.value })}
-            placeholder="Where you got stuck or made the mistake"
-          />
-        </label>
-        <label className="summary-template-item">
-          <span>Fix</span>
-          <textarea
-            rows={4}
-            value={form.mistakeFix}
-            onChange={(event) => onChange({ ...form, mistakeFix: event.target.value })}
-            placeholder="What you will do differently next time"
-          />
-        </label>
-        <label className="summary-template-item">
-          <span>Takeaway</span>
-          <textarea
-            rows={4}
-            value={form.mistakeReason || form.shortNote}
-            onChange={(event) => onChange({ ...form, mistakeReason: event.target.value })}
-            placeholder="Main learning from this problem"
-          />
-        </label>
-      </div>
-    </section>
-  );
-});
