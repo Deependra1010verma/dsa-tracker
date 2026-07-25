@@ -1081,6 +1081,53 @@ function readPersistedViewState(): PersistedViewState {
   }
 }
 
+const LOCAL_PROGRESS_STORAGE_KEY = "dsa-tracker-local-user-progress";
+
+type SavedProblemProgress = {
+  status?: Status;
+  isPinned?: boolean;
+  updatedAt: number;
+};
+
+type LocalProgressMap = Record<string, SavedProblemProgress>;
+
+function readLocalProgress(): LocalProgressMap {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(LOCAL_PROGRESS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as LocalProgressMap) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalProgressItem(key: string, updates: Partial<SavedProblemProgress>) {
+  if (typeof window === "undefined" || !key) return;
+  try {
+    const current = readLocalProgress();
+    const existing = current[key] ?? { updatedAt: Date.now() };
+    current[key] = {
+      ...existing,
+      ...updates,
+      updatedAt: Date.now(),
+    };
+    window.localStorage.setItem(LOCAL_PROGRESS_STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    // ignore storage error
+  }
+}
+
+function removeLocalProgressItem(key: string) {
+  if (typeof window === "undefined" || !key) return;
+  try {
+    const current = readLocalProgress();
+    delete current[key];
+    window.localStorage.setItem(LOCAL_PROGRESS_STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    // ignore storage error
+  }
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     headers: {
@@ -1254,8 +1301,40 @@ export default function App() {
         api<{ problems: Problem[] }>(`/api/problems?brief=1&set=${selectedProblemSet}`),
         api<{ activities: ActivityRecord[] }>(`/api/activity?limit=5000&set=${selectedProblemSet}`),
       ]);
+
+      const localProgress = readLocalProgress();
+      const patchedProblems = problemsRes.problems.map((problem) => {
+        const saved = localProgress[problem.title] || localProgress[problem._id];
+        if (!saved) return problem;
+
+        let modified = false;
+        let nextStatus = problem.status;
+        let nextPinned = problem.isPinned;
+
+        if (saved.status && saved.status !== problem.status) {
+          nextStatus = saved.status;
+          modified = true;
+        }
+
+        if (typeof saved.isPinned === "boolean" && saved.isPinned !== problem.isPinned) {
+          nextPinned = saved.isPinned;
+          modified = true;
+        }
+
+        if (modified) {
+          void api(`/api/problems/${problem._id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: nextStatus, isPinned: nextPinned }),
+          }).catch(() => {});
+
+          return { ...problem, status: nextStatus, isPinned: nextPinned };
+        }
+
+        return problem;
+      });
+
       setTopics(topicsRes.topics);
-      setProblems(problemsRes.problems);
+      setProblems(patchedProblems);
       setActivities(activitiesRes.activities);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -1996,6 +2075,9 @@ export default function App() {
 
   const updateStatus = useCallback(async (problem: Problem, nextStatus: Status) => {
     try {
+      saveLocalProgressItem(problem.title, { status: nextStatus });
+      saveLocalProgressItem(problem._id, { status: nextStatus });
+
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: nextStatus }),
@@ -2027,6 +2109,12 @@ export default function App() {
 
   const deleteProblem = useCallback(async (problemId: string) => {
     try {
+      const target = problems.find((p) => p._id === problemId);
+      if (target) {
+        removeLocalProgressItem(target.title);
+      }
+      removeLocalProgressItem(problemId);
+
       await api(`/api/problems/${problemId}`, { method: "DELETE" });
       removeProblem(problemId);
       if (activeProblem?._id === problemId) {
@@ -2037,13 +2125,17 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete problem");
     }
-  }, [activeProblem, removeProblem, setDrawerOpen, setActiveProblem, setError]);
+  }, [activeProblem, problems, removeProblem, setDrawerOpen, setActiveProblem, setError]);
 
   const togglePin = useCallback(async (problem: Problem) => {
     try {
+      const nextPinned = !problem.isPinned;
+      saveLocalProgressItem(problem.title, { isPinned: nextPinned });
+      saveLocalProgressItem(problem._id, { isPinned: nextPinned });
+
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}`, {
         method: "PATCH",
-        body: JSON.stringify({ isPinned: !problem.isPinned }),
+        body: JSON.stringify({ isPinned: nextPinned }),
       });
       upsertProblem(response.problem);
     } catch (err) {
