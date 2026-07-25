@@ -206,11 +206,6 @@ type RecallPrompt = {
   hint: string;
 };
 
-type SummaryItem = {
-  label: string;
-  value: string;
-};
-
 type ActivityKind = "solved" | "revision" | "revisit";
 
 type ActivityRecord = {
@@ -286,71 +281,28 @@ function buildRecallPrompts(problem: Problem): RecallPrompt[] {
 
   return [
     {
-      question: "What pattern should you reach for first?",
+      question: "Which pattern fits here?",
       hint: patternHint,
     },
     {
-      question: "What invariant must remain true?",
+      question: "What rule should not break?",
       hint: invariantHint,
     },
     {
-      question: "Why is the optimized approach better than brute force?",
+      question: "Why is your better idea faster?",
       hint: compareHint,
     },
     {
-      question: "What state or data structure actually changes while solving?",
+      question: "What keeps changing while solving?",
       hint: tagSummary,
     },
     {
-      question: "Which edge case or mistake has hurt you before?",
+      question: "What mistake should you avoid?",
       hint: mistakeHint,
     },
     {
-      question: "How would you explain the optimized idea in one sentence?",
+      question: "Explain the idea in one simple line.",
       hint: problem.shortNote || "keep it short and focus on the core transition",
-    },
-  ];
-}
-
-function buildProblemSummary(problem: Problem): SummaryItem[] {
-  const { trigger, reason, fix } = splitMistakeLog(problem.mistakeLog);
-
-  return [
-    {
-      label: "Problem",
-      value: `${problem.title}${problem.platformName ? ` · ${problem.platformName}` : ""}`,
-    },
-    {
-      label: "Pattern",
-      value: problem.pattern?.trim() || "Not set yet",
-    },
-    {
-      label: "Invariant",
-      value: problem.invariant?.trim() || "Not set yet",
-    },
-    {
-      label: "Brute force",
-      value: problem.compareBruteForce?.trim() || "Not set yet",
-    },
-    {
-      label: "Optimized idea",
-      value: problem.compareOptimized?.trim() || problem.longNote?.trim() || "Not set yet",
-    },
-    {
-      label: "Why better",
-      value: problem.compareWhyBetter?.trim() || "Not set yet",
-    },
-    {
-      label: "Mistake",
-      value: trigger || "Not set yet",
-    },
-    {
-      label: "Fix",
-      value: fix || problem.mistakeFix?.trim() || "Not set yet",
-    },
-    {
-      label: "Takeaway",
-      value: reason || problem.shortNote?.trim() || "Not set yet",
     },
   ];
 }
@@ -1076,10 +1028,13 @@ const DEFAULT_LOGIN = {
   password: __LOGIN_PASSWORD__,
 };
 
+type RatingFilterOption = "all" | "10" | "8-9" | "5-7";
+
 type PersistedViewState = {
   search?: string;
   statusFilter?: Status | "all" | "revisit";
   difficultyFilter?: Difficulty | "all";
+  ratingFilter?: RatingFilterOption;
   selectedTopic?: string;
   selectedProblemSet?: string;
   activeProblemId?: string | null;
@@ -1147,6 +1102,7 @@ export default function App() {
   const [search, setSearch] = useState(persistedViewState.search ?? "");
   const [statusFilter, setStatusFilter] = useState<Status | "all" | "revisit">(persistedViewState.statusFilter ?? "all");
   const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">(persistedViewState.difficultyFilter ?? "all");
+  const [ratingFilter, setRatingFilter] = useState<RatingFilterOption>(persistedViewState.ratingFilter ?? "all");
   const [selectedTopic, setSelectedTopic] = useState<string>(persistedViewState.selectedTopic ?? "all");
   const [selectedProblemSet, setSelectedProblemSet] = useState<string>(persistedViewState.selectedProblemSet ?? "set1");
   const [drawerOpen, setDrawerOpen] = useState(Boolean(persistedViewState.activeProblemId && persistedViewState.drawerOpen));
@@ -1171,6 +1127,30 @@ export default function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
+  const [isFocusMode, setIsFocusMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.localStorage.getItem("dsa_focus_mode") === "true";
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("dsa_focus_mode", String(isFocusMode));
+    }
+  }, [isFocusMode]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        setIsFocusMode((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const didInitialLoadRef = useRef(false);
   const restoredViewRef = useRef(false);
   const skipWorkspaceAutosaveRef = useRef(false);
@@ -1352,6 +1332,7 @@ export default function App() {
       search,
       statusFilter,
       difficultyFilter,
+      ratingFilter,
       selectedTopic,
       selectedProblemSet,
       activeProblemId: activeProblem?._id ?? null,
@@ -1360,7 +1341,7 @@ export default function App() {
     };
 
     window.localStorage.setItem(APP_VIEW_STATE_KEY, JSON.stringify(nextState));
-  }, [activeProblem?._id, difficultyFilter, drawerMode, drawerOpen, isAuthenticated, search, selectedTopic, selectedProblemSet, statusFilter]);
+  }, [activeProblem?._id, difficultyFilter, drawerMode, drawerOpen, isAuthenticated, ratingFilter, search, selectedTopic, selectedProblemSet, statusFilter]);
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1391,6 +1372,7 @@ export default function App() {
     setSearch("");
     setStatusFilter("all");
     setDifficultyFilter("all");
+    setRatingFilter("all");
     setSelectedTopic("all");
     setDrawerOpen(false);
     setActiveProblem(null);
@@ -1417,6 +1399,17 @@ export default function App() {
           : problem.status === statusFilter;
       const matchesDifficulty =
         difficultyFilter === "all" || problem.difficulty === difficultyFilter;
+      const ratingVal = problem.rating ?? 0;
+      const matchesRating =
+        ratingFilter === "all"
+          ? true
+          : ratingFilter === "10"
+          ? ratingVal === 10
+          : ratingFilter === "8-9"
+          ? ratingVal >= 8 && ratingVal <= 9
+          : ratingFilter === "5-7"
+          ? ratingVal >= 5 && ratingVal <= 7
+          : true;
       const matchesSearch =
         !needle ||
         [
@@ -1433,9 +1426,9 @@ export default function App() {
           .toLowerCase()
           .includes(needle);
 
-      return matchesTopic && matchesStatus && matchesDifficulty && matchesSearch;
+      return matchesTopic && matchesStatus && matchesDifficulty && matchesRating && matchesSearch;
     });
-  }, [deferredSearch, difficultyFilter, problemCategoryMap, problems, selectedTopic, statusFilter]);
+  }, [deferredSearch, difficultyFilter, problemCategoryMap, problems, ratingFilter, selectedTopic, statusFilter]);
 
   const sortedFilteredProblems = useMemo(() => {
     return [...filteredProblems].sort((left, right) => {
@@ -1589,6 +1582,9 @@ export default function App() {
     const baselineFix = activeProblem.mistakeFix ?? splitMistakeLog(activeProblem.mistakeLog).fix;
 
     return (
+      form.pattern !== (activeProblem.pattern ?? "") ||
+      form.compareOptimized !== (activeProblem.compareOptimized ?? "") ||
+      form.compareWhyBetter !== (activeProblem.compareWhyBetter ?? "") ||
       form.shortNote !== (activeProblem.shortNote ?? "") ||
       form.longNote !== (activeProblem.longNote ?? "") ||
       form.mistakeTrigger !== baselineTrigger ||
@@ -1598,10 +1594,13 @@ export default function App() {
   }, [
     activeProblem,
     drawerOpen,
+    form.compareOptimized,
+    form.compareWhyBetter,
     form.longNote,
     form.mistakeFix,
     form.mistakeReason,
     form.mistakeTrigger,
+    form.pattern,
     form.shortNote,
   ]);
 
@@ -1832,6 +1831,9 @@ export default function App() {
     const baselineFix = activeProblem.mistakeFix ?? splitMistakeLog(activeProblem.mistakeLog).fix;
 
     const hasWorkspaceChanges =
+      form.pattern !== (activeProblem.pattern ?? "") ||
+      form.compareOptimized !== (activeProblem.compareOptimized ?? "") ||
+      form.compareWhyBetter !== (activeProblem.compareWhyBetter ?? "") ||
       form.shortNote !== baselineShortNote ||
       form.longNote !== baselineLongNote ||
       form.mistakeTrigger !== baselineTrigger ||
@@ -1866,10 +1868,13 @@ export default function App() {
   }, [
     activeProblem,
     drawerOpen,
+    form.compareOptimized,
+    form.compareWhyBetter,
     form.longNote,
     form.mistakeFix,
     form.mistakeReason,
     form.mistakeTrigger,
+    form.pattern,
     form.shortNote,
     saveProblem,
   ]);
@@ -2071,7 +2076,7 @@ export default function App() {
   );
 
   const dashboardView = (
-    <div className="app-shell">
+    <div className={`app-shell ${isFocusMode ? "focus-mode" : ""}`}>
       {/* Sticky Mobile Top Bar */}
       <header className="mobile-header">
         <button className="menu-btn" onClick={() => setMobileSidebarOpen(true)} aria-label="Open menu">
@@ -2083,6 +2088,13 @@ export default function App() {
         </button>
         <span className="mobile-title">DSA Tracker</span>
         <div className="mobile-header-actions">
+          <button
+            className={`icon-btn ${isFocusMode ? "active" : ""}`}
+            onClick={() => setIsFocusMode((prev) => !prev)}
+            title="Toggle Focus Mode (Alt+F)"
+          >
+            🎯
+          </button>
           <button className="icon-btn" onClick={() => void loadData()} title="Refresh">
             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
               <path d="M23 4v6h-6M1 20v-6h6"></path>
@@ -2208,6 +2220,13 @@ export default function App() {
           </div>
 
           <div className="hero-actions">
+            <button
+              className={`secondary-btn focus-toggle-btn ${isFocusMode ? "active" : ""}`}
+              onClick={() => setIsFocusMode((value) => !value)}
+              title="Toggle Focus Mode (Alt+F)"
+            >
+              {isFocusMode ? "✨ Focus ON" : "🎯 Focus Mode"}
+            </button>
             <button className="primary-btn" onClick={() => openAddDrawer()}>
               Add
             </button>
@@ -2433,43 +2452,7 @@ export default function App() {
 
             <div className="problem-workspace-grid">
               <div className="problem-workspace-main">
-                <ProblemSummaryPanel problem={activeProblem} />
-
-                <div className="pattern-invariant-card">
-                  <p className="panel-label">
-                    <SectionBadge icon="🧠" label="Pattern + invariant" tone="sky" />
-                  </p>
-                  <div className="pattern-invariant-grid">
-                    <div>
-                      <span className="pattern-invariant-label">Pattern</span>
-                      <strong>{activeProblem.pattern?.trim() || "Not set yet"}</strong>
-                    </div>
-                    <div>
-                      <span className="pattern-invariant-label">Invariant</span>
-                      <strong>{activeProblem.invariant?.trim() || "Not set yet"}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="compare-approaches-card">
-                  <p className="panel-label">
-                    <SectionBadge icon="⚡" label="Compare approaches" tone="rose" />
-                  </p>
-                  <div className="compare-approaches-grid">
-                    <div>
-                      <span className="compare-label">Brute force</span>
-                      <strong>{activeProblem.compareBruteForce?.trim() || "Not set yet"}</strong>
-                    </div>
-                    <div>
-                      <span className="compare-label">Optimized</span>
-                      <strong>{activeProblem.compareOptimized?.trim() || "Not set yet"}</strong>
-                    </div>
-                    <div>
-                      <span className="compare-label">Why better</span>
-                      <strong>{activeProblem.compareWhyBetter?.trim() || "Not set yet"}</strong>
-                    </div>
-                  </div>
-                </div>
+                <ProblemSummaryPanel form={form} onChange={setForm} />
 
                 <section className="mistake-log-block">
                   <p className="panel-label">
@@ -2562,6 +2545,17 @@ export default function App() {
             <option value="Easy">Easy</option>
             <option value="Medium">Medium</option>
             <option value="Hard">Hard</option>
+          </select>
+
+          <select
+            value={ratingFilter}
+            onChange={(event) => setRatingFilter(event.target.value as RatingFilterOption)}
+            title="Filter problems by rating"
+          >
+            <option value="all">All ratings ⭐</option>
+            <option value="10">10 ⭐ (Top Priority)</option>
+            <option value="8-9">8–9 ⭐ (High Priority)</option>
+            <option value="5-7">5–7 ⭐ (Medium)</option>
           </select>
 
           <button className="ghost-btn" onClick={() => openAddDrawer(selectedTopic !== "all" ? selectedTopic : undefined)}>
@@ -3377,24 +3371,27 @@ const ActiveRecallPanel = memo(function ActiveRecallPanel({ problem }: { problem
       <div className="section-heading">
         <div>
           <p className="panel-label">
-            <SectionBadge icon="🎯" label="Active recall" tone="mint" />
+            <SectionBadge icon="🎯" label="Quick check" tone="mint" />
           </p>
-          <h3>Answer before you reveal</h3>
+          <h3>Try once, then peek</h3>
         </div>
         <button className="secondary-btn recall-toggle" onClick={() => setShowHints((value) => !value)}>
-          {showHints ? "Hide hints" : "Show hints"}
+          {showHints ? "Hide clues" : "Show clues"}
         </button>
       </div>
 
       <p className="section-note">
-        Quick self-check. Try to answer each prompt from memory, then reveal the hint if you get stuck.
+        No pressure. Guess the idea first, then open the clue if your brain says “loading...”.
       </p>
 
       <div className="recall-grid">
-        {prompts.map((prompt) => (
+        {prompts.map((prompt, index) => (
           <article key={prompt.question} className="recall-card">
-            <strong>{prompt.question}</strong>
-            <span>{showHints ? prompt.hint : "Think first, then reveal the hint."}</span>
+            <div className="recall-card-head">
+              <span className="recall-step">{index + 1}</span>
+              <strong>{prompt.question}</strong>
+            </div>
+            <span>{showHints ? prompt.hint : "Tiny guess first. Clue is waiting."}</span>
           </article>
         ))}
       </div>
@@ -3402,9 +3399,13 @@ const ActiveRecallPanel = memo(function ActiveRecallPanel({ problem }: { problem
   );
 });
 
-const ProblemSummaryPanel = memo(function ProblemSummaryPanel({ problem }: { problem: Problem }) {
-  const items = useMemo(() => buildProblemSummary(problem), [problem]);
-
+const ProblemSummaryPanel = memo(function ProblemSummaryPanel({
+  form,
+  onChange,
+}: {
+  form: ProblemFormState;
+  onChange: (nextForm: ProblemFormState) => void;
+}) {
   return (
     <section className="summary-template-card">
       <div className="section-heading">
@@ -3421,12 +3422,59 @@ const ProblemSummaryPanel = memo(function ProblemSummaryPanel({ problem }: { pro
       </p>
 
       <div className="summary-template-grid">
-        {items.map((item) => (
-          <article key={item.label} className="summary-template-item">
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-          </article>
-        ))}
+        <label className="summary-template-item">
+          <span>Pattern</span>
+          <input
+            value={form.pattern}
+            onChange={(event) => onChange({ ...form, pattern: event.target.value })}
+            placeholder="Two pointers, DP, graph..."
+          />
+        </label>
+        <label className="summary-template-item">
+          <span>Optimized idea</span>
+          <textarea
+            rows={4}
+            value={form.compareOptimized}
+            onChange={(event) => onChange({ ...form, compareOptimized: event.target.value })}
+            placeholder="What you changed to improve it"
+          />
+        </label>
+        <label className="summary-template-item">
+          <span>Why better</span>
+          <textarea
+            rows={4}
+            value={form.compareWhyBetter}
+            onChange={(event) => onChange({ ...form, compareWhyBetter: event.target.value })}
+            placeholder="Why the optimized version wins"
+          />
+        </label>
+        <label className="summary-template-item">
+          <span>Mistake</span>
+          <textarea
+            rows={4}
+            value={form.mistakeTrigger}
+            onChange={(event) => onChange({ ...form, mistakeTrigger: event.target.value })}
+            placeholder="Where you got stuck or made the mistake"
+          />
+        </label>
+        <label className="summary-template-item">
+          <span>Fix</span>
+          <textarea
+            rows={4}
+            value={form.mistakeFix}
+            onChange={(event) => onChange({ ...form, mistakeFix: event.target.value })}
+            placeholder="What you will do differently next time"
+          />
+        </label>
+        <label className="summary-template-item">
+          <span>Takeaway</span>
+          <textarea
+            rows={4}
+            value={form.mistakeReason || form.shortNote}
+            onChange={(event) => onChange({ ...form, mistakeReason: event.target.value })}
+            placeholder="Main learning from this problem"
+          />
+        </label>
       </div>
     </section>
   );
