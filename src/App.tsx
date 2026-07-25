@@ -1,6 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
 import { topicSubCategories } from "./data/categories";
-import type { Prerequisite } from "./api/types";
+import type { Prerequisite, PatternFamilyItem } from "./api/types";
 
 type Difficulty = "Easy" | "Medium" | "Hard";
 type Status = "unsolved" | "solved" | "revisit" | "skipped";
@@ -35,6 +35,7 @@ type Problem = {
   compareOptimized?: string;
   compareWhyBetter?: string;
   prerequisites?: Prerequisite[];
+  patternFamily?: PatternFamilyItem[];
   rating?: number;
   shortNote: string;
   longNote?: string;
@@ -2550,6 +2551,10 @@ export default function App() {
                   prerequisites={form.prerequisites}
                   onChange={(nextPrereqs) => setForm({ ...form, prerequisites: nextPrereqs })}
                 />
+                <PatternFamilySection
+                  patternFamily={activeProblem.patternFamily}
+                  pattern={activeProblem.pattern}
+                />
               </div>
             </div>
           </section>
@@ -3402,7 +3407,7 @@ function SectionBadge({
 }: {
   icon: string;
   label: string;
-  tone: "gold" | "mint" | "sky" | "rose" | "amber";
+  tone: "gold" | "mint" | "sky" | "rose" | "amber" | "purple";
 }) {
   return (
     <span className={`section-badge section-badge-${tone}`}>
@@ -3527,6 +3532,75 @@ const ProblemPrerequisitesSection = memo(function ProblemPrerequisitesSection({
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+});
+
+const PatternFamilySection = memo(function PatternFamilySection({
+  patternFamily = [],
+  pattern = "",
+}: {
+  patternFamily?: PatternFamilyItem[];
+  pattern?: string;
+}) {
+  const getPlatformClass = (platform?: string) => {
+    const p = (platform || "").toLowerCase();
+    if (p.includes("leetcode")) return "platform-badge-leetcode";
+    if (p.includes("gfg") || p.includes("geeks")) return "platform-badge-gfg";
+    if (p.includes("codeforces")) return "platform-badge-codeforces";
+    return "";
+  };
+
+  if (!patternFamily || patternFamily.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="prerequisites-card pattern-family-card">
+      <div className="section-heading">
+        <div>
+          <p className="panel-label">
+            <SectionBadge icon="🔥" label="Pattern Multiplier" tone="purple" />
+          </p>
+          <h3>Same Pattern Family (Solve Together)</h3>
+        </div>
+      </div>
+
+      <p className="section-note">
+        Solving these sibling problems sharing the exact same {pattern ? `"${pattern}"` : "algorithm"} pattern locks in core muscle memory!
+      </p>
+
+      <div className="prerequisites-list">
+        {patternFamily.map((item, index) => (
+          <div key={`${item.title}-${index}`} className="prerequisite-item">
+            <div className="prerequisite-item-info">
+              <div className="prerequisite-title-row" style={{ flexWrap: "wrap", gap: "6px" }}>
+                <strong>{item.title}</strong>
+                {item.platformName ? (
+                  <span className={`platform-badge ${getPlatformClass(item.platformName)}`}>
+                    {item.platformName}
+                  </span>
+                ) : null}
+              </div>
+              {item.note ? <p className="prerequisite-note">⚡ {item.note}</p> : null}
+            </div>
+
+            <div className="prerequisite-actions">
+              {item.platformUrl ? (
+                <a
+                  href={item.platformUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="link-btn primary"
+                  style={{ padding: "6px 12px", fontSize: "0.82rem" }}
+                >
+                  Practice ↗
+                </a>
+              ) : null}
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );

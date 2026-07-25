@@ -695,6 +695,26 @@ export const problemSeeds: ProblemSeed[] = [
           note: "Understanding sorted array properties helps in binary/two-pointer search."
         }
       ],
+      patternFamily: [
+        {
+          title: "3Sum Closest",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/3sum-closest/",
+          note: "Same 1 anchor + 2-pointer sweep tracking min absolute difference."
+        },
+        {
+          title: "4Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/4sum/",
+          note: "Generalizes 3Sum by adding a second outer loop anchor."
+        },
+        {
+          title: "Two Sum II - Input Array Is Sorted",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/",
+          note: "Core 2-pointer inner loop mechanism."
+        }
+      ],
       tags: ["arrays", "sorting", "two pointers"],
       priority: 10,
       isPinned: true,
@@ -756,6 +776,26 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Track last seen positions and tighten the window on repeats.",
       longNote: "Maintain a left boundary that jumps past the previous occurrence of each character.",
+      patternFamily: [
+        {
+          title: "Longest Substring with At Most K Distinct Characters",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/longest-substring-with-at-most-k-distinct-characters/",
+          note: "Same variable sliding window with hashmap size <= K condition."
+        },
+        {
+          title: "Fruit Into Baskets",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/fruit-into-baskets/",
+          note: "Exact same sliding window with K=2 max distinct elements constraint."
+        },
+        {
+          title: "Max Consecutive Ones III",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/max-consecutive-ones-iii/",
+          note: "Sliding window expanding right pointer while zero count <= K."
+        }
+      ],
       tags: ["arrays", "sliding window", "hashing"],
       priority: 10,
       isPinned: true,
@@ -874,6 +914,26 @@ export const problemSeeds: ProblemSeed[] = [
           platformName: "LeetCode",
           platformUrl: "https://leetcode.com/problems/range-sum-query-immutable/",
           note: "Understand prefix sum array: SubarraySum(i,j) = Prefix[j] - Prefix[i-1]."
+        }
+      ],
+      patternFamily: [
+        {
+          title: "Subarray Sums Divisible by K",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/subarray-sums-divisible-by-k/",
+          note: "Exact same prefix sum hash map tracking modulo remainders."
+        },
+        {
+          title: "Continuous Subarray Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/continuous-subarray-sum/",
+          note: "Same prefix sum remainder mapping checking min subarray length >= 2."
+        },
+        {
+          title: "Binary Subarrays With Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/binary-subarrays-with-sum/",
+          note: "Identical prefix sum count algorithm applied on 0/1 binary array."
         }
       ],
       tags: ["arrays", "prefix sum", "hash map"],
@@ -6459,6 +6519,26 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Each unvisited land cell starts a new island via DFS/BFS.",
       longNote: "The foundational grid graph problem — mark visited cells and count components.",
+      patternFamily: [
+        {
+          title: "Max Area of Island",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/max-area-of-island/",
+          note: "Same 4-directional matrix DFS returning accumulated land cell sum."
+        },
+        {
+          title: "Surrounded Regions",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/surrounded-regions/",
+          note: "Same matrix DFS starting from boundary 'O's to preserve unsurrounded regions."
+        },
+        {
+          title: "Number of Closed Islands",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/number-of-closed-islands/",
+          note: "Matrix DFS checking if component touches border."
+        }
+      ],
       tags: ["graph", "dfs", "bfs", "matrix"],
       priority: 10,
       isPinned: true,

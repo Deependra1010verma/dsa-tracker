@@ -21,6 +21,13 @@ export type Prerequisite = {
   kind?: "prerequisite" | "warmup" | "stepping_stone";
 };
 
+export type PatternFamilyItem = {
+  title: string;
+  platformName?: string;
+  platformUrl?: string;
+  note?: string;
+};
+
 export type ProblemSeed = {
   title: string;
   topicSlug: string;
@@ -45,6 +52,7 @@ export type ProblemSeed = {
   compareOptimized?: string;
   compareWhyBetter?: string;
   prerequisites?: Prerequisite[];
+  patternFamily?: PatternFamilyItem[];
   tags: string[];
   priority: number;
   isPinned: boolean;
@@ -53,5 +61,5 @@ export type ProblemSeed = {
   lastRevisionAt?: Date;
   nextRevisionAt?: Date;
   revisionCompletedAt?: Date;
+  fromCustomSeed?: boolean;
 };
-

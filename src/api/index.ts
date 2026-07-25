@@ -232,7 +232,8 @@ type MemoryProblem = {
   compareBruteForce: string;
   compareOptimized: string;
   compareWhyBetter: string;
-  prerequisites?: Array<{ title: string; platformName?: string; platformUrl?: string; note?: string }>;
+  prerequisites?: Array<{ title: string; platformName?: string; platformUrl?: string; note?: string; kind?: "prerequisite" | "warmup" | "stepping_stone" }>;
+  patternFamily?: Array<{ title: string; platformName?: string; platformUrl?: string; note?: string }>;
   pattern: string;
   rating: number;
   revisionCount: number;
@@ -310,6 +311,7 @@ function seedProblemToMemoryProblem(seed: (typeof allProblemSeeds)[number]): Mem
     compareOptimized: seed.compareOptimized ?? "",
     compareWhyBetter: seed.compareWhyBetter ?? "",
     prerequisites: seed.prerequisites ? [...seed.prerequisites] : [],
+    patternFamily: seed.patternFamily ? [...seed.patternFamily] : [],
     pattern: seed.pattern ?? "",
     rating: seed.rating ?? 0,
     revisionCount: isSolvedLike ? 1 : 0,
