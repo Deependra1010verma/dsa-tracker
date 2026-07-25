@@ -1896,7 +1896,10 @@ export default function App() {
         isPinned: form.isPinned,
       };
 
+      saveLocalProgressItem(payload.title, { status: payload.status, isPinned: payload.isPinned });
+
       if (activeProblem) {
+        saveLocalProgressItem(activeProblem._id, { status: payload.status, isPinned: payload.isPinned });
         const response = await api<{ problem: Problem }>(`/api/problems/${activeProblem._id}`, {
           method: "PATCH",
           body: JSON.stringify(payload),
@@ -1909,6 +1912,7 @@ export default function App() {
           method: "POST",
           body: JSON.stringify(payload),
         });
+        saveLocalProgressItem(response.problem._id, { status: response.problem.status, isPinned: response.problem.isPinned });
         appendProblem(response.problem);
         setActiveProblem(response.problem);
         syncFormFromProblem(response.problem);
