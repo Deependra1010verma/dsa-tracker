@@ -232,6 +232,7 @@ type MemoryProblem = {
   compareBruteForce: string;
   compareOptimized: string;
   compareWhyBetter: string;
+  prerequisites?: Array<{ title: string; platformName?: string; platformUrl?: string; note?: string }>;
   pattern: string;
   rating: number;
   revisionCount: number;
@@ -308,6 +309,7 @@ function seedProblemToMemoryProblem(seed: (typeof allProblemSeeds)[number]): Mem
     compareBruteForce: seed.compareBruteForce ?? "",
     compareOptimized: seed.compareOptimized ?? "",
     compareWhyBetter: seed.compareWhyBetter ?? "",
+    prerequisites: seed.prerequisites ? [...seed.prerequisites] : [],
     pattern: seed.pattern ?? "",
     rating: seed.rating ?? 0,
     revisionCount: isSolvedLike ? 1 : 0,
@@ -387,6 +389,7 @@ function toMemoryProblemResponse(problem: MemoryProblem, brief = false) {
     compareBruteForce: brief ? undefined : problem.compareBruteForce,
     compareOptimized: brief ? undefined : problem.compareOptimized,
     compareWhyBetter: brief ? undefined : problem.compareWhyBetter,
+    prerequisites: problem.prerequisites ? [...problem.prerequisites] : [],
     pattern: problem.pattern,
     rating: problem.rating,
     revisionCount: problem.revisionCount,
@@ -820,7 +823,7 @@ app.get(
 
     if (brief) {
       query.select(
-        "title topic platformName platformUrl roadmapSection roadmapSectionOrder roadmapOrder difficulty status shortNote pattern rating revisionCount revisionStage solvedAt revisitAt lastRevisionAt nextRevisionAt revisionCompletedAt tags priority isPinned updatedAt"
+        "title topic platformName platformUrl roadmapSection roadmapSectionOrder roadmapOrder difficulty status shortNote pattern rating revisionCount revisionStage solvedAt revisitAt lastRevisionAt nextRevisionAt revisionCompletedAt prerequisites tags priority isPinned updatedAt"
       );
     }
 
@@ -959,6 +962,7 @@ app.post(
       compareBruteForce = "",
       compareOptimized = "",
       compareWhyBetter = "",
+      prerequisites = [],
       tags = [],
       priority = 0,
       isPinned = false,
@@ -996,6 +1000,7 @@ app.post(
         compareBruteForce,
         compareOptimized,
         compareWhyBetter,
+        prerequisites: Array.isArray(prerequisites) ? prerequisites : [],
         pattern,
         rating,
         revisionCount: isSolvedLike ? 1 : 0,
@@ -1048,6 +1053,7 @@ app.post(
       compareBruteForce,
       compareOptimized,
       compareWhyBetter,
+      prerequisites: Array.isArray(prerequisites) ? prerequisites : [],
       tags,
       priority,
       isPinned,
@@ -1109,6 +1115,7 @@ app.patch(
         compareBruteForce: next.compareBruteForce ?? problem.compareBruteForce,
         compareOptimized: next.compareOptimized ?? problem.compareOptimized,
         compareWhyBetter: next.compareWhyBetter ?? problem.compareWhyBetter,
+        prerequisites: Array.isArray(next.prerequisites) ? next.prerequisites : problem.prerequisites,
         tags: Array.isArray(next.tags) ? next.tags : problem.tags,
         priority: typeof next.priority === "number" ? next.priority : problem.priority,
         isPinned: typeof next.isPinned === "boolean" ? next.isPinned : problem.isPinned,
@@ -1174,6 +1181,7 @@ app.patch(
       compareBruteForce: next.compareBruteForce ?? problem.compareBruteForce,
       compareOptimized: next.compareOptimized ?? problem.compareOptimized,
       compareWhyBetter: next.compareWhyBetter ?? problem.compareWhyBetter,
+      prerequisites: Array.isArray(next.prerequisites) ? next.prerequisites : problem.prerequisites,
       tags: Array.isArray(next.tags) ? next.tags : problem.tags,
       priority: typeof next.priority === "number" ? next.priority : problem.priority,
       isPinned: typeof next.isPinned === "boolean" ? next.isPinned : problem.isPinned,

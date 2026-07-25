@@ -47,6 +47,14 @@ const problemSchema = new mongoose.Schema(
     compareBruteForce: { type: String, default: "" },
     compareOptimized: { type: String, default: "" },
     compareWhyBetter: { type: String, default: "" },
+    prerequisites: [
+      {
+        title: { type: String, required: true },
+        platformName: { type: String, default: "" },
+        platformUrl: { type: String, default: "" },
+        note: { type: String, default: "" },
+      },
+    ],
     rating: { type: Number, default: 0 },
     revisionCount: { type: Number, default: 0 },
     revisionStage: { type: Number, default: 0 },

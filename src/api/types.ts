@@ -13,6 +13,14 @@ export type TopicSeed = {
   accent: string;
 };
 
+export type Prerequisite = {
+  title: string;
+  platformName?: string;
+  platformUrl?: string;
+  note?: string;
+  kind?: "prerequisite" | "warmup" | "stepping_stone";
+};
+
 export type ProblemSeed = {
   title: string;
   topicSlug: string;
@@ -36,6 +44,7 @@ export type ProblemSeed = {
   compareBruteForce?: string;
   compareOptimized?: string;
   compareWhyBetter?: string;
+  prerequisites?: Prerequisite[];
   tags: string[];
   priority: number;
   isPinned: boolean;
@@ -45,3 +54,4 @@ export type ProblemSeed = {
   nextRevisionAt?: Date;
   revisionCompletedAt?: Date;
 };
+

@@ -1,8 +1,10 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
 import { topicSubCategories } from "./data/categories";
+import type { Prerequisite } from "./api/types";
 
 type Difficulty = "Easy" | "Medium" | "Hard";
 type Status = "unsolved" | "solved" | "revisit" | "skipped";
+type SortByOption = "optimal" | "status" | "difficulty" | "rating" | "title";
 
 type Topic = {
   _id: string;
@@ -32,6 +34,7 @@ type Problem = {
   compareBruteForce?: string;
   compareOptimized?: string;
   compareWhyBetter?: string;
+  prerequisites?: Prerequisite[];
   rating?: number;
   shortNote: string;
   longNote?: string;
@@ -74,6 +77,7 @@ type ProblemFormState = {
   compareBruteForce: string;
   compareOptimized: string;
   compareWhyBetter: string;
+  prerequisites: Prerequisite[];
   rating: number;
   shortNote: string;
   longNote: string;
@@ -99,6 +103,7 @@ const emptyForm: ProblemFormState = {
   compareBruteForce: "",
   compareOptimized: "",
   compareWhyBetter: "",
+  prerequisites: [],
   rating: 0,
   shortNote: "",
   longNote: "",
@@ -1103,6 +1108,7 @@ export default function App() {
   const [statusFilter, setStatusFilter] = useState<Status | "all" | "revisit">(persistedViewState.statusFilter ?? "all");
   const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | "all">(persistedViewState.difficultyFilter ?? "all");
   const [ratingFilter, setRatingFilter] = useState<RatingFilterOption>(persistedViewState.ratingFilter ?? "all");
+  const [sortByFilter, setSortByFilter] = useState<SortByOption>("optimal");
   const [selectedTopic, setSelectedTopic] = useState<string>(persistedViewState.selectedTopic ?? "all");
   const [selectedProblemSet, setSelectedProblemSet] = useState<string>(persistedViewState.selectedProblemSet ?? "set1");
   const [drawerOpen, setDrawerOpen] = useState(Boolean(persistedViewState.activeProblemId && persistedViewState.drawerOpen));
@@ -1450,6 +1456,22 @@ export default function App() {
         }
       }
 
+      if (sortByFilter === "status") {
+        const statusMap: Record<Status, number> = { unsolved: 1, revisit: 2, solved: 3, skipped: 4 };
+        const statusDelta = statusMap[left.status] - statusMap[right.status];
+        if (statusDelta !== 0) return statusDelta;
+      } else if (sortByFilter === "difficulty") {
+        const diffMap: Record<Difficulty, number> = { Easy: 1, Medium: 2, Hard: 3 };
+        const diffDelta = diffMap[left.difficulty] - diffMap[right.difficulty];
+        if (diffDelta !== 0) return diffDelta;
+      } else if (sortByFilter === "rating") {
+        const ratingDelta = (right.rating ?? 0) - (left.rating ?? 0);
+        if (ratingDelta !== 0) return ratingDelta;
+      } else if (sortByFilter === "title") {
+        const titleDelta = left.title.localeCompare(right.title);
+        if (titleDelta !== 0) return titleDelta;
+      }
+
       if (selectedTopic === "all") {
         const topicOrderDelta = left.topic.order - right.topic.order;
         if (topicOrderDelta !== 0) {
@@ -1467,6 +1489,10 @@ export default function App() {
         return roadmapOrderDelta;
       }
 
+      const diffMap: Record<Difficulty, number> = { Easy: 1, Medium: 2, Hard: 3 };
+      const diffDelta = diffMap[left.difficulty] - diffMap[right.difficulty];
+      if (diffDelta !== 0) return diffDelta;
+
       const priorityDelta = right.priority - left.priority;
       if (priorityDelta !== 0) {
         return priorityDelta;
@@ -1474,7 +1500,7 @@ export default function App() {
 
       return left.title.localeCompare(right.title);
     });
-  }, [filteredProblems, nowDate, revisionStateMap, selectedTopic, statusFilter]);
+  }, [filteredProblems, nowDate, revisionStateMap, selectedTopic, sortByFilter, statusFilter]);
 
   const groupedByTopicAndSection = useMemo(() => {
     const topicGroups: Array<{
@@ -1694,6 +1720,7 @@ export default function App() {
       compareBruteForce: problem.compareBruteForce ?? "",
       compareOptimized: problem.compareOptimized ?? "",
       compareWhyBetter: problem.compareWhyBetter ?? "",
+      prerequisites: problem.prerequisites ? [...problem.prerequisites] : [],
       rating: problem.rating ?? 0,
       shortNote: problem.shortNote,
       longNote: problem.longNote ?? "",
@@ -1760,6 +1787,7 @@ export default function App() {
         compareBruteForce: form.compareBruteForce.trim(),
         compareOptimized: form.compareOptimized.trim(),
         compareWhyBetter: form.compareWhyBetter.trim(),
+        prerequisites: form.prerequisites,
         rating: form.rating,
         shortNote: form.shortNote.trim(),
         longNote: form.longNote.trim(),
@@ -1838,7 +1866,8 @@ export default function App() {
       form.longNote !== baselineLongNote ||
       form.mistakeTrigger !== baselineTrigger ||
       form.mistakeReason !== baselineReason ||
-      form.mistakeFix !== baselineFix;
+      form.mistakeFix !== baselineFix ||
+      JSON.stringify(form.prerequisites) !== JSON.stringify(activeProblem.prerequisites ?? []);
 
     if (!hasWorkspaceChanges) {
       setWorkspaceSaveState((current) => (current === "saving" ? current : "idle"));
@@ -2517,6 +2546,10 @@ export default function App() {
 
               <div className="problem-workspace-side">
                 <ActiveRecallPanel problem={activeProblem} />
+                <ProblemPrerequisitesSection
+                  prerequisites={form.prerequisites}
+                  onChange={(nextPrereqs) => setForm({ ...form, prerequisites: nextPrereqs })}
+                />
               </div>
             </div>
           </section>
@@ -2529,6 +2562,18 @@ export default function App() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
+
+          <select
+            value={sortByFilter}
+            onChange={(event) => setSortByFilter(event.target.value as SortByOption)}
+            title="Sort solving order"
+          >
+            <option value="optimal">🎯 Optimal Order (Best Sequence)</option>
+            <option value="status">📌 Unsolved First</option>
+            <option value="difficulty">⚡ Difficulty (Easy → Hard)</option>
+            <option value="rating">⭐ Highest Importance</option>
+            <option value="title">🔤 Title (A-Z)</option>
+          </select>
 
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Status | "all" | "revisit")}>
             <option value="all">All status</option>
@@ -2554,8 +2599,8 @@ export default function App() {
           >
             <option value="all">All ratings ⭐</option>
             <option value="10">10 ⭐ (Top Priority)</option>
-            <option value="8-9">8–9 ⭐ (High Priority)</option>
-            <option value="5-7">5–7 ⭐ (Medium)</option>
+            <option value="8–9">8–9 ⭐ (High Priority)</option>
+            <option value="5–7">5–7 ⭐ (Medium)</option>
           </select>
 
           <button className="ghost-btn" onClick={() => openAddDrawer(selectedTopic !== "all" ? selectedTopic : undefined)}>
@@ -2927,6 +2972,11 @@ export default function App() {
                       />
                     </label>
                   </div>
+
+                  <ProblemPrerequisitesSection
+                    prerequisites={form.prerequisites}
+                    onChange={(nextPrereqs) => setForm({ ...form, prerequisites: nextPrereqs })}
+                  />
 
                   <label>
                     Tags
@@ -3394,6 +3444,89 @@ const ActiveRecallPanel = memo(function ActiveRecallPanel({ problem }: { problem
             <span>{showHints ? prompt.hint : "Tiny guess first. Clue is waiting."}</span>
           </article>
         ))}
+      </div>
+    </section>
+  );
+});
+
+const ProblemPrerequisitesSection = memo(function ProblemPrerequisitesSection({
+  prerequisites = [],
+}: {
+  prerequisites?: Prerequisite[];
+  onChange?: (nextPrereqs: Prerequisite[]) => void;
+  readOnly?: boolean;
+}) {
+  const getPlatformClass = (platform?: string) => {
+    const p = (platform || "").toLowerCase();
+    if (p.includes("leetcode")) return "platform-badge-leetcode";
+    if (p.includes("gfg") || p.includes("geeks")) return "platform-badge-gfg";
+    if (p.includes("codeforces")) return "platform-badge-codeforces";
+    return "";
+  };
+
+  if (!prerequisites || prerequisites.length === 0) {
+    return null;
+  }
+
+  const hasWarmup = prerequisites.some(
+    (p) => p.kind === "warmup" || p.kind === "stepping_stone"
+  );
+
+  return (
+    <section className="prerequisites-card">
+      <div className="section-heading">
+        <div>
+          <p className="panel-label">
+            <SectionBadge icon="🔗" label={hasWarmup ? "Learning Path & Warmup" : "Prerequisites"} tone="sky" />
+          </p>
+          <h3>{hasWarmup ? "Prerequisites & Stepping Stones" : "Foundational Problems (Solve First)"}</h3>
+        </div>
+      </div>
+
+      <p className="section-note">
+        {hasWarmup
+          ? "Solve strict prerequisites or practice recommended warmups to master the core intuition."
+          : "Solving these baseline problems first gives you the core pattern needed for this problem."}
+      </p>
+
+      <div className="prerequisites-list">
+        {prerequisites.map((req, index) => {
+          const isWarmup = req.kind === "warmup" || req.kind === "stepping_stone";
+          return (
+            <div key={`${req.title}-${index}`} className="prerequisite-item">
+              <div className="prerequisite-item-info">
+                <div className="prerequisite-title-row" style={{ flexWrap: "wrap", gap: "6px" }}>
+                  <strong>{req.title}</strong>
+                  {isWarmup ? (
+                    <span className="platform-badge platform-badge-warmup">
+                      ⚡ Recommended Stepping Stone
+                    </span>
+                  ) : null}
+                  {req.platformName ? (
+                    <span className={`platform-badge ${getPlatformClass(req.platformName)}`}>
+                      {req.platformName}
+                    </span>
+                  ) : null}
+                </div>
+                {req.note ? <p className="prerequisite-note">💡 {req.note}</p> : null}
+              </div>
+
+              <div className="prerequisite-actions">
+                {req.platformUrl ? (
+                  <a
+                    href={req.platformUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="link-btn primary"
+                    style={{ padding: "6px 12px", fontSize: "0.82rem" }}
+                  >
+                    Practice ↗
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

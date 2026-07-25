@@ -681,6 +681,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Sort, fix one value, and run two pointers on the suffix.",
       longNote: "Skip duplicates carefully and use left/right movement based on the current sum.",
+      prerequisites: [
+        {
+          title: "Two Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/two-sum/",
+          note: "Master the 2-sum hash lookup & 2-pointer approach first."
+        },
+        {
+          title: "Check if Array is Sorted",
+          platformName: "GeeksforGeeks",
+          platformUrl: "https://www.geeksforgeeks.org/problems/check-if-an-array-is-sorted0701/1",
+          note: "Understanding sorted array properties helps in binary/two-pointer search."
+        }
+      ],
       tags: ["arrays", "sorting", "two pointers"],
       priority: 10,
       isPinned: true,
@@ -696,6 +710,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 8,
       shortNote: "Sort, fix two values, and solve remaining pair with two pointers.",
       longNote: "Prune duplicates and be careful about overflow while comparing sums.",
+      prerequisites: [
+        {
+          title: "3Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/3sum/",
+          note: "Learn fixing one anchor element & running 2-pointer scan first."
+        },
+        {
+          title: "Two Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/two-sum/",
+          note: "Base target sum lookup logic."
+        }
+      ],
       tags: ["arrays", "sorting", "two pointers"],
       priority: 8,
       isPinned: false,
@@ -758,6 +786,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Track required counts and shrink once the window is valid.",
       longNote: "Use frequency maps plus a matched counter to find the minimum valid window.",
+      prerequisites: [
+        {
+          title: "Longest Substring Without Repeating Characters",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/longest-substring-without-repeating-characters/",
+          note: "Master expanding and shrinking variable sliding window."
+        },
+        {
+          title: "Find All Anagrams in a String",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/find-all-anagrams-in-a-string/",
+          note: "Understand character frequency map matching inside sliding window."
+        }
+      ],
       tags: ["arrays", "sliding window", "hashing"],
       priority: 10,
       isPinned: true,
@@ -820,6 +862,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Count previous prefix sums equal to current minus k.",
       longNote: "A hash map of prefix frequencies turns subarray counting into O(n).",
+      prerequisites: [
+        {
+          title: "Two Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/two-sum/",
+          note: "Master complement lookup in hash map."
+        },
+        {
+          title: "Range Sum Query",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/range-sum-query-immutable/",
+          note: "Understand prefix sum array: SubarraySum(i,j) = Prefix[j] - Prefix[i-1]."
+        }
+      ],
       tags: ["arrays", "prefix sum", "hash map"],
       priority: 10,
       isPinned: true,
@@ -1006,6 +1062,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Detect which half is sorted, then decide where target lies.",
       longNote: "One side of the midpoint is always sorted; use that to discard half the range.",
+      prerequisites: [
+        {
+          title: "Binary Search",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/binary-search/",
+          note: "Basic binary search low/mid/high logic."
+        },
+        {
+          title: "Find Minimum in Rotated Array",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/find-minimum-in-rotated-sorted-array/",
+          note: "Identify pivot boundary in rotated sorted array."
+        }
+      ],
       tags: ["arrays", "binary search", "rotated array"],
       priority: 10,
       isPinned: true,
@@ -1956,6 +2026,15 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 8,
       shortNote: "Store pair sums from first two arrays, query complements from the other two.",
       longNote: "Hashing all partial sums collapses O(n^4) brute force to O(n^2).",
+      prerequisites: [
+        {
+          title: "Two Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/two-sum/",
+          note: "Recommended Stepping Stone: Splitting 4 arrays into pairs (A+B) and (C+D) uses 2-sum hashmap complement lookup.",
+          kind: "warmup"
+        }
+      ],
       tags: ["hashing", "hash map", "arrays"],
       priority: 8,
       isPinned: false,
@@ -2341,6 +2420,15 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Track leftMax and rightMax while shrinking from both sides.",
       longNote: "Move the side with the smaller height because its water level is already determined.",
+      prerequisites: [
+        {
+          title: "Container With Most Water",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/container-with-most-water/",
+          note: "Recommended Stepping Stone: Master 2-pointer boundary shrinking first before calculating trapped volume.",
+          kind: "warmup"
+        }
+      ],
       tags: ["two pointers", "arrays"],
       priority: 10,
       isPinned: true,
@@ -2388,6 +2476,15 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Use a monotonic deque to keep the current maximum at the front.",
       longNote: "Drop smaller trailing elements and remove the front when it leaves the window range.",
+      prerequisites: [
+        {
+          title: "Daily Temperatures",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/daily-temperatures/",
+          note: "Recommended Stepping Stone: Monotonic deque popping logic is easier to grasp after learning monotonic stack element elimination.",
+          kind: "warmup"
+        }
+      ],
       tags: ["sliding window", "deque", "arrays"],
       priority: 10,
       isPinned: true,
@@ -2974,6 +3071,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Search the minimum eating speed that satisfies the time limit.",
       longNote: "Whenever a speed works, try smaller speeds to minimize the answer.",
+      prerequisites: [
+        {
+          title: "Binary Search",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/binary-search/",
+          note: "Base binary search search space reduction."
+        },
+        {
+          title: "Search Insert Position",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/search-insert-position/",
+          note: "Lower-bound search condition pattern."
+        }
+      ],
       tags: ["binary search", "answer search"],
       priority: 10,
       isPinned: true,
@@ -2989,6 +3100,15 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Search the smallest ship capacity that completes the schedule.",
       longNote: "Feasibility is monotonic, so the minimum valid capacity can be binary searched.",
+      prerequisites: [
+        {
+          title: "Koko Eating Bananas",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/koko-eating-bananas/",
+          note: "Recommended Stepping Stone: Koko Eating Bananas sets up the predicate check function template for search space binary search.",
+          kind: "warmup"
+        }
+      ],
       tags: ["binary search", "answer search"],
       priority: 10,
       isPinned: true,
@@ -3462,6 +3582,14 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Reverse only the segment between left and right, then reconnect both ends.",
       longNote: "Careful pointer bookkeeping around the segment boundaries is the whole problem.",
+      prerequisites: [
+        {
+          title: "Reverse Linked List",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/reverse-linked-list/",
+          note: "Master iterative 3-pointer list reversal."
+        }
+      ],
       tags: ["linked list", "reversal"],
       priority: 10,
       isPinned: true,
@@ -3477,6 +3605,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Reverse complete groups of k nodes and leave the final short group unchanged.",
       longNote: "Use a helper to verify group size before each reversal.",
+      prerequisites: [
+        {
+          title: "Reverse Linked List II",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/reverse-linked-list-ii/",
+          note: "Practice segment reversal and pointer reconnects."
+        },
+        {
+          title: "Reverse Linked List",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/reverse-linked-list/",
+          note: "Base linked list reversal technique."
+        }
+      ],
       tags: ["linked list", "reversal"],
       priority: 10,
       isPinned: true,
@@ -3706,6 +3848,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Combine O(1) key lookup with O(1) recency updates.",
       longNote: "The doubly linked list preserves order while the hash map jumps to nodes instantly.",
+      prerequisites: [
+        {
+          title: "Design HashMap",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/design-hashmap/",
+          note: "Base key-value mapping structure."
+        },
+        {
+          title: "Reverse Linked List",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/reverse-linked-list/",
+          note: "Doubly linked list node insertion and pointer splicing."
+        }
+      ],
       tags: ["linked list", "design", "hash map"],
       priority: 10,
       isPinned: true,
@@ -4061,6 +4217,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Pop bars when a shorter height appears and compute maximal width spans.",
       longNote: "Each bar is treated as the limiting height for the widest valid rectangle it can support.",
+      prerequisites: [
+        {
+          title: "Daily Temperatures",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/daily-temperatures/",
+          note: "Monotonic stack index tracking."
+        },
+        {
+          title: "Next Greater Element I",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/next-greater-element-i/",
+          note: "Stack popping condition logic."
+        }
+      ],
       tags: ["stack", "monotonic stack", "arrays"],
       priority: 10,
       isPinned: true,
@@ -4979,6 +5149,15 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Return the current node when the two targets split across its subtrees.",
       longNote: "Each DFS call reports whether it found p, q, or their ancestor.",
+      prerequisites: [
+        {
+          title: "Lowest Common Ancestor of a Binary Search Tree",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree/",
+          note: "Recommended Stepping Stone: BST version allows intuitive value comparison to guide traversal before attempting general post-order tree DFS.",
+          kind: "warmup"
+        }
+      ],
       tags: ["trees", "lca", "dfs"],
       priority: 10,
       isPinned: true,
@@ -5009,6 +5188,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "At each node, compute the best downward gain and update the best split path.",
       longNote: "Negative subtree gains should be discarded when extending a path upward.",
+      prerequisites: [
+        {
+          title: "Maximum Depth of Binary Tree",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/maximum-depth-of-binary-tree/",
+          note: "Base bottom-up post-order DFS depth computation."
+        },
+        {
+          title: "Diameter of Binary Tree",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/diameter-of-binary-tree/",
+          note: "Global max path update inside recursion."
+        }
+      ],
       tags: ["trees", "tree dp"],
       priority: 10,
       isPinned: true,
@@ -6433,6 +6626,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Detect cycle in directed graph using Kahn's BFS or DFS coloring.",
       longNote: "If a valid topological order exists, all courses can be finished.",
+      prerequisites: [
+        {
+          title: "BFS Traversal of Graph",
+          platformName: "GeeksforGeeks",
+          platformUrl: "https://www.geeksforgeeks.org/problems/bfs-traversal-of-graph/1",
+          note: "Master graph adjacency list representation and queue iteration."
+        },
+        {
+          title: "Detect Cycle in Directed Graph",
+          platformName: "GeeksforGeeks",
+          platformUrl: "https://www.geeksforgeeks.org/problems/detect-cycle-in-a-directed-graph/1",
+          note: "Understand in-degree reduction and recursion state stack."
+        }
+      ],
       tags: ["graph", "topological sort", "dfs", "bfs"],
       priority: 10,
       isPinned: true,
@@ -6448,6 +6655,14 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Return a valid course ordering using Kahn's algorithm or DFS postorder.",
       longNote: "Same cycle detection as Course Schedule, but output the topological order.",
+      prerequisites: [
+        {
+          title: "Course Schedule",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/course-schedule/",
+          note: "Master dependency cycle checking with Kahn's Algorithm."
+        }
+      ],
       tags: ["graph", "topological sort"],
       priority: 10,
       isPinned: true,
@@ -6463,6 +6678,14 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Build a graph from adjacent word pairs, then topological sort characters.",
       longNote: "First differing character defines a directed edge; detect cycles and return lex order.",
+      prerequisites: [
+        {
+          title: "Course Schedule II",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/course-schedule-ii/",
+          note: "Topological ordering emission template."
+        }
+      ],
       tags: ["graph", "topological sort", "strings"],
       priority: 10,
       isPinned: true,
@@ -7160,6 +7383,20 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 9,
       shortNote: "Multi-source BFS from all rotten oranges simultaneously.",
       longNote: "Enqueue all rotten cells, expand layer by layer. If any fresh orange remains, return -1.",
+      prerequisites: [
+        {
+          title: "Number of Islands",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/number-of-islands/",
+          note: "Grid 4-directional matrix traversal."
+        },
+        {
+          title: "BFS Traversal of Graph",
+          platformName: "GeeksforGeeks",
+          platformUrl: "https://www.geeksforgeeks.org/problems/bfs-traversal-of-graph/1",
+          note: "Queue layer-by-layer distance propagation."
+        }
+      ],
       tags: ["graph", "bfs", "matrix", "multi-source"],
       priority: 9,
       isPinned: false,
@@ -8456,6 +8693,15 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 8,
       shortNote: "Reduce problem to House Robber by building a frequency sum array.",
       longNote: "If we take value x, we gain frequency[x]*x but cannot take x-1 or x+1. This maps exactly to House Robber.",
+      prerequisites: [
+        {
+          title: "House Robber",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/house-robber/",
+          note: "Recommended Stepping Stone: Delete & Earn reduces directly to House Robber once frequency array is built.",
+          kind: "warmup"
+        }
+      ],
       tags: ["dp", "1d-dp"],
       priority: 8,
       isPinned: false,
@@ -8471,6 +8717,14 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "dp[i] = min(dp[i], 1 + dp[i - coin]) for each coin.",
       longNote: "Find the minimum coins to make amount i. Tabulation array of size amount + 1 initialized to infinity.",
+      prerequisites: [
+        {
+          title: "Climbing Stairs",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/climbing-stairs/",
+          note: "Base 1D DP transition concept."
+        }
+      ],
       tags: ["dp", "1d-dp", "knapsack"],
       priority: 10,
       isPinned: true,
@@ -8548,6 +8802,14 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Check if a subset exists with sum equal to totalSum / 2.",
       longNote: "If total sum is odd, return false. Otherwise solve the subset sum target problem in O(N * Target) space/time.",
+      prerequisites: [
+        {
+          title: "Subset Sum Problem",
+          platformName: "GeeksforGeeks",
+          platformUrl: "https://www.geeksforgeeks.org/problems/subset-sum-problem2014/1",
+          note: "Base 0/1 knapsack subset inclusion/exclusion table build."
+        }
+      ],
       tags: ["dp", "knapsack"],
       priority: 10,
       isPinned: true,
@@ -8563,6 +8825,14 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Find subset combinations that partition into two subsets with difference target.",
       longNote: "Equation: subsetSum1 - subsetSum2 = target implies subsetSum1 = (totalSum + target) / 2. Reduce to subset sum.",
+      prerequisites: [
+        {
+          title: "Partition Equal Subset Sum",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/partition-equal-subset-sum/",
+          note: "Target reduction equation setup."
+        }
+      ],
       tags: ["dp", "knapsack"],
       priority: 10,
       isPinned: true,
@@ -8578,6 +8848,14 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "Count coin combinations: dp[i] += dp[i - coin].",
       longNote: "Order of loops matters to count combinations instead of permutations (outer loop over coins, inner loop over amounts).",
+      prerequisites: [
+        {
+          title: "Coin Change",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/coin-change/",
+          note: "1D DP array updating intuition."
+        }
+      ],
       tags: ["dp", "knapsack"],
       priority: 10,
       isPinned: true,
@@ -8837,6 +9115,15 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "dp[i][j] = 1 + min(insert, delete, replace) if mismatch.",
       longNote: "Compute min operations to transform word1 to word2. Base cases handle empty string conversions.",
+      prerequisites: [
+        {
+          title: "Longest Common Subsequence",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/longest-common-subsequence/",
+          note: "Recommended Stepping Stone: LCS sets up 2D string matrix state transitions dp[i][j] before adding edit choice costs.",
+          kind: "warmup"
+        }
+      ],
       tags: ["dp", "strings"],
       priority: 10,
       isPinned: true,
@@ -9430,6 +9717,15 @@ export const problemSeeds: ProblemSeed[] = [
       rating: 10,
       shortNote: "dp[i] is true if s[0..i] can be segmented; transition: dp[i] = dp[j] && wordDict.has(s[j..i]).",
       longNote: "Verify if dictionary substrings compose the target string. O(N^2) or Trie optimization.",
+      prerequisites: [
+        {
+          title: "Longest Common Subsequence",
+          platformName: "LeetCode",
+          platformUrl: "https://leetcode.com/problems/longest-common-subsequence/",
+          note: "Recommended Stepping Stone: Helps build string partition state indexing intuition.",
+          kind: "warmup"
+        }
+      ],
       tags: ["dp", "strings"],
       priority: 10,
       isPinned: true,
