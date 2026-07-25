@@ -828,9 +828,21 @@ const ProblemRow = memo(function ProblemRow({
           </button>
         </div>
       </td>
-      <td className="problem-title-col" onClick={() => onOpenStudy(problem)}>
+      <td className="problem-title-col" onClick={() => onOpenLink(problem)}>
         <div className="problem-title-wrapper">
-          <span className="problem-title-text">{problem.title}</span>
+          <a
+            href={problem.platformUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="problem-title-text"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenLink(problem);
+            }}
+            title={`Open ${problem.title} on ${problem.platformName}`}
+          >
+            {problem.title}
+          </a>
           {problem.pattern ? <span className="pattern-chip">{problem.pattern}</span> : null}
         </div>
       </td>
@@ -838,19 +850,20 @@ const ProblemRow = memo(function ProblemRow({
         {problem.rating ? <span className="importance-rating-badge">{formatRating(problem.rating)}</span> : <span className="importance-rating-empty">-</span>}
       </td>
       <td className="practice-col">
-        <a
-          href={problem.platformUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="practice-platform-link"
-          onClick={(event) => event.stopPropagation()}
-          title={`Practice on ${problem.platformName}`}
+        <button
+          type="button"
+          className="table-workspace-btn"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenStudy(problem);
+          }}
+          title="Open Problem Workspace"
         >
-          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="practice-icon">
-            <polyline points="16 18 22 12 16 6"></polyline>
-            <polyline points="8 6 2 12 8 18"></polyline>
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+            <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
           </svg>
-        </a>
+        </button>
       </td>
       <td className="note-col">
         <button
@@ -2634,7 +2647,7 @@ export default function App() {
                     <th style={{ width: "90px" }}>Status</th>
                     <th>Problem</th>
                     <th style={{ width: "120px" }}>Importance</th>
-                    <th style={{ width: "100px" }}>Practice</th>
+                    <th style={{ width: "100px" }}>Workspace</th>
                     <th style={{ width: "80px" }}>Note</th>
                     <th style={{ width: "90px" }}>Revision</th>
                     <th style={{ width: "120px" }}>Difficulty</th>

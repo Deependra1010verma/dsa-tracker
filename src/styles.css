@@ -2589,14 +2589,19 @@ textarea {
   flex-wrap: wrap;
 }
 
-.problem-title-text {
+.problem-title-text,
+a.problem-title-text {
   font-weight: 500;
   font-size: 0.95rem;
   color: #f1f5f9;
+  text-decoration: none !important;
 }
 
-.table-problem-row:hover .problem-title-text {
+.table-problem-row:hover .problem-title-text,
+.problem-title-text:hover,
+.problem-title-text:focus {
   color: #60a5fa;
+  text-decoration: none !important;
 }
 
 .solve-link {
@@ -2689,6 +2694,36 @@ textarea {
 .practice-platform-link:hover .practice-icon {
   color: #f97316;
   transform: scale(1.1);
+}
+
+.table-workspace-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #38bdf8;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  position: relative;
+  z-index: 2;
+}
+
+.table-workspace-btn:hover {
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.12);
+  transform: scale(1.1);
+}
+
+.workspace-icon {
+  color: #38bdf8;
+  transition: color 0.2s, transform 0.2s;
+}
+
+.table-workspace-btn:hover .workspace-icon {
+  color: #7dd3fc;
 }
 
 .table-note-btn {
