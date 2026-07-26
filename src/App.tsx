@@ -787,6 +787,25 @@ function getProblemCategories(problem: Problem): string[] {
   return cats;
 }
 
+function hasNoteContent(problem: Problem | null | undefined): boolean {
+  if (!problem) return false;
+  const trigger = problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger;
+  const reason = problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason;
+  const fix = problem.mistakeFix ?? splitMistakeLog(problem.mistakeLog).fix;
+
+  return Boolean(
+    (problem.shortNote && problem.shortNote.trim().length > 0) ||
+    (problem.longNote && problem.longNote.trim().length > 0) ||
+    (problem.mistakeLog && problem.mistakeLog.trim().length > 0) ||
+    (trigger && trigger.trim().length > 0) ||
+    (reason && reason.trim().length > 0) ||
+    (fix && fix.trim().length > 0) ||
+    (problem.compareBruteForce && problem.compareBruteForce.trim().length > 0) ||
+    (problem.compareOptimized && problem.compareOptimized.trim().length > 0) ||
+    (problem.compareWhyBetter && problem.compareWhyBetter.trim().length > 0)
+  );
+}
+
 const ProblemRow = memo(function ProblemRow({
   problem,
   displayIndex,
@@ -800,14 +819,7 @@ const ProblemRow = memo(function ProblemRow({
   onOpenLink,
   onDelete,
 }: ProblemRowProps) {
-  const hasNote = Boolean(
-    problem.shortNote ||
-      problem.longNote ||
-      problem.mistakeLog ||
-      problem.mistakeTrigger ||
-      problem.mistakeReason ||
-      problem.mistakeFix
-  );
+  const hasNote = hasNoteContent(problem);
 
   return (
     <tr className="table-problem-row">
@@ -1145,6 +1157,236 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+type NotesPreviewModalProps = {
+  problem: Problem | null;
+  onClose: () => void;
+  onOpenWorkspace: (problem: Problem) => void;
+  onOpenEdit: (problem: Problem) => void;
+  onOpenLink: (problem: Problem) => void;
+};
+
+function NotesPreviewModal({
+  problem,
+  onClose,
+  onOpenWorkspace,
+  onOpenEdit,
+  onOpenLink,
+}: NotesPreviewModalProps) {
+  if (!problem) return null;
+
+  const trigger = problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger;
+  const reason = problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason;
+  const fix = problem.mistakeFix ?? splitMistakeLog(problem.mistakeLog).fix;
+
+  const hasShortNote = Boolean(problem.shortNote?.trim());
+  const hasLongNote = Boolean(problem.longNote?.trim());
+  const hasTrigger = Boolean(trigger?.trim());
+  const hasReason = Boolean(reason?.trim());
+  const hasFix = Boolean(fix?.trim());
+  const hasMistakes = hasTrigger || hasReason || hasFix || Boolean(problem.mistakeLog?.trim());
+  const hasBrute = Boolean(problem.compareBruteForce?.trim());
+  const hasOptimized = Boolean(problem.compareOptimized?.trim());
+  const hasWhyBetter = Boolean(problem.compareWhyBetter?.trim());
+  const hasComparison = hasBrute || hasOptimized || hasWhyBetter;
+
+  const renderNoteBody = (content: string) => {
+    const containsHtml = /<[a-z][\s\S]*>/i.test(content);
+    if (containsHtml) {
+      return <div className="notes-preview-html-content" dangerouslySetInnerHTML={{ __html: content }} />;
+    }
+    return <div className="notes-preview-text-content">{content}</div>;
+  };
+
+  return (
+    <div className="notes-preview-modal-backdrop" onClick={onClose}>
+      <div className="notes-preview-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="notes-preview-modal-header">
+          <div className="notes-preview-header-main">
+            <div className="notes-preview-badges">
+              <span className="notes-preview-topic-chip">{problem.topic.name}</span>
+              <span className={`difficulty-pill difficulty-${problem.difficulty.toLowerCase()}`}>{problem.difficulty}</span>
+              {problem.rating ? <span className="importance-rating-badge">{formatRating(problem.rating)}</span> : null}
+              {problem.pattern ? <span className="pattern-chip">{problem.pattern}</span> : null}
+            </div>
+            <h3 className="notes-preview-title">
+              {problem.title}
+              <button
+                type="button"
+                className="notes-preview-link-btn"
+                onClick={() => onOpenLink(problem)}
+                title={`Open on ${problem.platformName}`}
+              >
+                ↗
+              </button>
+            </h3>
+          </div>
+          <button type="button" className="notes-preview-close-btn" onClick={onClose} aria-label="Close notes preview">
+            ✕
+          </button>
+        </div>
+
+        {/* Body - Only rendered sections */}
+        <div className="notes-preview-modal-body">
+          {/* Quick Takeaway Banner */}
+          {hasShortNote ? (
+            <div className="notes-preview-takeaway-banner">
+              <span className="takeaway-icon">💡</span>
+              <div className="takeaway-content">
+                <span className="takeaway-label">Key Takeaway</span>
+                <p className="takeaway-text">{problem.shortNote}</p>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Detailed Solution / Notes */}
+          {hasLongNote ? (
+            <div className="notes-preview-section">
+              <div className="notes-preview-section-title">
+                <span className="section-title-icon">📝</span> Solution & Notes
+              </div>
+              <div className="notes-preview-section-body">
+                {renderNoteBody(problem.longNote)}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Mistake Analysis Section */}
+          {hasMistakes ? (
+            <div className="notes-preview-section">
+              <div className="notes-preview-section-title">
+                <span className="section-title-icon">🚧</span> Mistake Analysis & Retrospective
+              </div>
+              <div className="notes-preview-cards-grid">
+                {hasTrigger ? (
+                  <div className="notes-preview-card mistake-trigger-card">
+                    <div className="notes-preview-card-header">
+                      <span className="card-badge-icon">🛑</span>
+                      <span className="card-badge-title">What Went Wrong</span>
+                    </div>
+                    <p className="notes-preview-card-text">{trigger}</p>
+                  </div>
+                ) : null}
+
+                {hasReason ? (
+                  <div className="notes-preview-card mistake-reason-card">
+                    <div className="notes-preview-card-header">
+                      <span className="card-badge-icon">🔍</span>
+                      <span className="card-badge-title">Why It Happened</span>
+                    </div>
+                    <p className="notes-preview-card-text">{reason}</p>
+                  </div>
+                ) : null}
+
+                {hasFix ? (
+                  <div className="notes-preview-card mistake-fix-card">
+                    <div className="notes-preview-card-header">
+                      <span className="card-badge-icon">🎯</span>
+                      <span className="card-badge-title">Fix / Rule For Next Time</span>
+                    </div>
+                    <p className="notes-preview-card-text">{fix}</p>
+                  </div>
+                ) : null}
+
+                {!hasTrigger && !hasReason && !hasFix && problem.mistakeLog?.trim() ? (
+                  <div className="notes-preview-card mistake-general-card">
+                    <div className="notes-preview-card-header">
+                      <span className="card-badge-icon">⚠️</span>
+                      <span className="card-badge-title">Mistake Log</span>
+                    </div>
+                    <p className="notes-preview-card-text">{problem.mistakeLog}</p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Approach & Complexity Comparison Section */}
+          {hasComparison ? (
+            <div className="notes-preview-section">
+              <div className="notes-preview-section-title">
+                <span className="section-title-icon">⚖️</span> Approach & Complexity Comparison
+              </div>
+              <div className="notes-preview-cards-grid">
+                {hasBrute ? (
+                  <div className="notes-preview-card compare-brute-card">
+                    <div className="notes-preview-card-header">
+                      <span className="card-badge-icon">🐢</span>
+                      <span className="card-badge-title">Brute Force Approach</span>
+                    </div>
+                    <p className="notes-preview-card-text">{problem.compareBruteForce}</p>
+                  </div>
+                ) : null}
+
+                {hasOptimized ? (
+                  <div className="notes-preview-card compare-opt-card">
+                    <div className="notes-preview-card-header">
+                      <span className="card-badge-icon">⚡</span>
+                      <span className="card-badge-title">Optimized Approach</span>
+                    </div>
+                    <p className="notes-preview-card-text">{problem.compareOptimized}</p>
+                  </div>
+                ) : null}
+
+                {hasWhyBetter ? (
+                  <div className="notes-preview-card compare-why-card">
+                    <div className="notes-preview-card-header">
+                      <span className="card-badge-icon">✨</span>
+                      <span className="card-badge-title">Why Optimized Is Better</span>
+                    </div>
+                    <p className="notes-preview-card-text">{problem.compareWhyBetter}</p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="notes-preview-modal-footer">
+          <button
+            type="button"
+            className="notes-preview-btn notes-preview-primary-btn"
+            onClick={() => {
+              onClose();
+              onOpenWorkspace(problem);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+              <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+            </svg>
+            <span>Open Full Workspace</span>
+          </button>
+
+          <button
+            type="button"
+            className="notes-preview-btn notes-preview-secondary-btn"
+            onClick={() => {
+              onClose();
+              onOpenEdit(problem);
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+            <span>Edit Notes</span>
+          </button>
+
+          <button
+            type="button"
+            className="notes-preview-btn notes-preview-ghost-btn"
+            onClick={() => onOpenLink(problem)}
+          >
+            <span>Solve on {problem.platformName} ↗</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const loginConfigured = Boolean(DEFAULT_LOGIN.username && DEFAULT_LOGIN.password);
   const persistedViewState = useMemo(() => readPersistedViewState(), []);
@@ -1174,6 +1416,18 @@ export default function App() {
   const [selectedProblemSet, setSelectedProblemSet] = useState<string>(persistedViewState.selectedProblemSet ?? "set1");
   const [drawerOpen, setDrawerOpen] = useState(Boolean(persistedViewState.activeProblemId && persistedViewState.drawerOpen));
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
+  const [previewNoteProblem, setPreviewNoteProblem] = useState<Problem | null>(null);
+
+  useEffect(() => {
+    if (!previewNoteProblem) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPreviewNoteProblem(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [previewNoteProblem]);
 
   useEffect(() => {
     if (didInitialLoadRef.current) {
@@ -1838,6 +2092,19 @@ export default function App() {
       setError(err instanceof Error ? err.message : "Could not load problem details");
     });
   }, [hydrateProblemDetails, syncFormFromProblem]);
+
+  const handleWorkspaceClick = useCallback((problem: Problem) => {
+    if (hasNoteContent(problem)) {
+      setPreviewNoteProblem(problem);
+      void hydrateProblemDetails(problem).then((nextProblem) => {
+        if (hasNoteContent(nextProblem)) {
+          setPreviewNoteProblem(nextProblem);
+        }
+      }).catch(() => {});
+    } else {
+      openStudyView(problem);
+    }
+  }, [hydrateProblemDetails, openStudyView]);
 
   const openEditDrawer = useCallback((problem: Problem) => {
     setActiveProblem(problem);
@@ -2782,7 +3049,7 @@ export default function App() {
                                   revisionStateMap={revisionStateMap}
                                   problemCategoryMap={problemCategoryMap}
                                   nowDate={nowDate}
-                                  onOpenStudy={openStudyView}
+                                  onOpenStudy={handleWorkspaceClick}
                                   onToggleStatus={updateStatus}
                                   onOpenEdit={openEditDrawer}
                                   onTogglePin={togglePin}
@@ -2805,7 +3072,7 @@ export default function App() {
                             revisionStateMap={revisionStateMap}
                             problemCategoryMap={problemCategoryMap}
                             nowDate={nowDate}
-                            onOpenStudy={openStudyView}
+                            onOpenStudy={handleWorkspaceClick}
                             onToggleStatus={updateStatus}
                             onOpenEdit={openEditDrawer}
                             onTogglePin={togglePin}
@@ -3237,6 +3504,16 @@ export default function App() {
             )}
           </aside>
         </div>
+      ) : null}
+
+      {previewNoteProblem ? (
+        <NotesPreviewModal
+          problem={previewNoteProblem}
+          onClose={() => setPreviewNoteProblem(null)}
+          onOpenWorkspace={(prob) => openStudyView(prob)}
+          onOpenEdit={(prob) => openEditDrawer(prob)}
+          onOpenLink={(prob) => openProblemLink(prob)}
+        />
       ) : null}
     </div>
   );
