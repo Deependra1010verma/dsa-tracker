@@ -191,14 +191,13 @@ function formatRating(rating?: number) {
 }
 
 function composeMistakeLog(trigger: string, reason: string, fix: string) {
-  return [trigger.trim(), reason.trim(), fix.trim()].filter(Boolean).join("\n\n");
+  return [trigger, reason, fix].filter((part) => part.length > 0).join("\n\n");
 }
 
 function splitMistakeLog(value?: string | null) {
   const parts = (value ?? "")
     .split(/\n\s*\n/)
-    .map((part) => part.trim())
-    .filter(Boolean);
+    .filter((part) => part.length > 0);
 
   return {
     trigger: parts[0] ?? "",
@@ -2142,18 +2141,18 @@ export default function App() {
         platformUrl: form.platformUrl.trim(),
         difficulty: form.difficulty,
         status: form.status,
-        pattern: form.pattern.trim(),
-        invariant: form.invariant.trim(),
-        compareBruteForce: form.compareBruteForce.trim(),
-        compareOptimized: form.compareOptimized.trim(),
-        compareWhyBetter: form.compareWhyBetter.trim(),
+        pattern: form.pattern,
+        invariant: form.invariant,
+        compareBruteForce: form.compareBruteForce,
+        compareOptimized: form.compareOptimized,
+        compareWhyBetter: form.compareWhyBetter,
         prerequisites: form.prerequisites,
         rating: form.rating,
-        shortNote: form.shortNote.trim(),
-        longNote: form.longNote.trim(),
-        mistakeTrigger: form.mistakeTrigger.trim(),
-        mistakeReason: form.mistakeReason.trim(),
-        mistakeFix: form.mistakeFix.trim(),
+        shortNote: form.shortNote,
+        longNote: form.longNote,
+        mistakeTrigger: form.mistakeTrigger,
+        mistakeReason: form.mistakeReason,
+        mistakeFix: form.mistakeFix,
         mistakeLog: composeMistakeLog(form.mistakeTrigger, form.mistakeReason, form.mistakeFix),
         tags: form.tags
           .split(",")
@@ -2173,7 +2172,9 @@ export default function App() {
         });
         upsertProblem(response.problem);
         setActiveProblem(response.problem);
-        syncFormFromProblem(response.problem);
+        if (!options?.keepWorkspaceOpen) {
+          syncFormFromProblem(response.problem);
+        }
       } else {
         const response = await api<{ problem: Problem }>("/api/problems", {
           method: "POST",
@@ -2182,7 +2183,9 @@ export default function App() {
         saveLocalProgressItem(response.problem._id, { status: response.problem.status, isPinned: response.problem.isPinned });
         appendProblem(response.problem);
         setActiveProblem(response.problem);
-        syncFormFromProblem(response.problem);
+        if (!options?.keepWorkspaceOpen) {
+          syncFormFromProblem(response.problem);
+        }
       }
 
       if (drawerOpen) {
