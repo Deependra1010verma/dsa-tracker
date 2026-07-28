@@ -1245,7 +1245,7 @@ function NotesPreviewModal({
                 <span className="section-title-icon">📝</span> Solution & Notes
               </div>
               <div className="notes-preview-section-body">
-                {renderNoteBody(problem.longNote)}
+                {renderNoteBody(problem.longNote ?? "")}
               </div>
             </div>
           ) : null}
@@ -1742,7 +1742,7 @@ export default function App() {
     const needle = deferredSearch.trim().toLowerCase();
     return problems.filter((problem) => {
       const categories = problemCategoryMap.get(problem._id) ?? getProblemCategories(problem);
-      const matchesTopic = selectedTopic === "all" || problem.topic._id === selectedTopic;
+      const matchesTopic = selectedTopic === "all" || Boolean(needle) || problem.topic._id === selectedTopic;
       const matchesStatus =
         statusFilter === "all"
           ? true
@@ -1818,7 +1818,7 @@ export default function App() {
         if (titleDelta !== 0) return titleDelta;
       }
 
-      if (selectedTopic === "all") {
+      if (selectedTopic === "all" || Boolean(deferredSearch.trim())) {
         const topicOrderDelta = left.topic.order - right.topic.order;
         if (topicOrderDelta !== 0) {
           return topicOrderDelta;
@@ -2996,7 +2996,9 @@ export default function App() {
               <p className="panel-label">Problems</p>
               <h3>{filteredProblems.length} records</h3>
             </div>
-            <span className="section-note">{selectedTopicData ? selectedTopicData.name : "All"}</span>
+            <span className="section-note">
+              {deferredSearch.trim() ? "All Topics (Search)" : selectedTopicData ? selectedTopicData.name : "All"}
+            </span>
           </div>
 
           {loading ? (
@@ -3021,50 +3023,53 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedTopic === "all"
-                    ? groupedByTopicAndSection.map((group) => (
-                        <Fragment key={group.topicId}>
-                          <tr
-                            className="table-topic-header-row"
-                            onClick={() => toggleTopicExpanded(group.topicId)}
-                            style={{ cursor: "pointer" }}
-                          >
-                            <td colSpan={editMode ? 10 : 9} className="table-topic-header-cell">
-                              <div className="topic-header-content">
-                                <span className="expand-arrow" style={{ color: group.accent }}>
-                                  {expandedTopics.has(group.topicId) ? "▼" : "▶"}
-                                </span>
-                                <span className="topic-name">{group.topicName}</span>
-                                <span className="topic-stats-badge">
-                                  {group.solvedCount} / {group.totalCount} Solved
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
+                  {selectedTopic === "all" || Boolean(deferredSearch.trim())
+                    ? groupedByTopicAndSection.map((group) => {
+                        const isExpanded = expandedTopics.has(group.topicId) || Boolean(deferredSearch.trim());
+                        return (
+                          <Fragment key={group.topicId}>
+                            <tr
+                              className="table-topic-header-row"
+                              onClick={() => toggleTopicExpanded(group.topicId)}
+                              style={{ cursor: "pointer" }}
+                            >
+                              <td colSpan={editMode ? 10 : 9} className="table-topic-header-cell">
+                                <div className="topic-header-content">
+                                  <span className="expand-arrow" style={{ color: group.accent }}>
+                                    {isExpanded ? "▼" : "▶"}
+                                  </span>
+                                  <span className="topic-name">{group.topicName}</span>
+                                  <span className="topic-stats-badge">
+                                    {group.solvedCount} / {group.totalCount} Solved
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
 
-                          {expandedTopics.has(group.topicId)
-                            ? group.sections.map((sectionGroup) => (
-                                <SectionBlock
-                                  key={sectionGroup.sectionKey}
-                                  group={sectionGroup}
-                                  accent={group.accent}
-                                  canEdit={editMode}
-                                  revisionStateMap={revisionStateMap}
-                                  problemCategoryMap={problemCategoryMap}
-                                  nowDate={nowDate}
-                                  onOpenStudy={handleWorkspaceClick}
-                                  onToggleStatus={updateStatus}
-                                  onOpenEdit={openEditDrawer}
-                                  onTogglePin={togglePin}
-                                  onOpenLink={openProblemLink}
-                                  onDelete={deleteProblem}
-                                  rowLimit={sectionRowLimit}
-                                  onLoadMore={() => setSectionRowLimit((value) => value + 30)}
-                                />
-                              ))
-                            : null}
-                        </Fragment>
-                      ))
+                            {isExpanded
+                              ? group.sections.map((sectionGroup) => (
+                                  <SectionBlock
+                                    key={sectionGroup.sectionKey}
+                                    group={sectionGroup}
+                                    accent={group.accent}
+                                    canEdit={editMode}
+                                    revisionStateMap={revisionStateMap}
+                                    problemCategoryMap={problemCategoryMap}
+                                    nowDate={nowDate}
+                                    onOpenStudy={handleWorkspaceClick}
+                                    onToggleStatus={updateStatus}
+                                    onOpenEdit={openEditDrawer}
+                                    onTogglePin={togglePin}
+                                    onOpenLink={openProblemLink}
+                                    onDelete={deleteProblem}
+                                    rowLimit={sectionRowLimit}
+                                    onLoadMore={() => setSectionRowLimit((value) => value + 30)}
+                                  />
+                                ))
+                              : null}
+                          </Fragment>
+                        );
+                      })
                     : groupedByTopicAndSection.flatMap((group) =>
                         group.sections.map((sectionGroup) => (
                           <SectionBlock

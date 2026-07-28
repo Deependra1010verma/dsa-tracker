@@ -777,7 +777,7 @@ app.get(
       const problems = memoryProblems
         .filter((problem) => {
           if (problem.topic.problemSet !== problemSet) return false;
-          const matchesTopic = !topic || problem.topic._id === topic || problem.topic.slug === topic;
+          const matchesTopic = !topic || Boolean(search) || problem.topic._id === topic || problem.topic.slug === topic;
           const matchesDifficulty = !difficulty || problem.difficulty === difficulty;
           const matchesStatus = !status || problem.status === status;
           return matchesTopic && matchesDifficulty && matchesStatus && matchesMemorySearch(problem, search);
@@ -791,7 +791,7 @@ app.get(
     }
 
     const filter: Record<string, unknown> = { problemSet };
-    if (topic) {
+    if (topic && !search) {
       filter.topic = topic;
     }
     if (difficulty) {
