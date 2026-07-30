@@ -89,6 +89,53 @@ const activitySchema = new mongoose.Schema(
 
 activitySchema.index({ problem: 1, kind: 1, occurredAt: 1 });
 
+const generalNoteSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    category: {
+      type: String,
+      enum: [
+        "Data Structures",
+        "Algorithmic Patterns",
+        "Mistakes & Anti-Patterns",
+        "Interview Strategy",
+        "Language & Syntax",
+        "System Design",
+      ],
+      default: "Algorithmic Patterns",
+      index: true,
+    },
+    summary: { type: String, default: "" },
+    content: { type: String, default: "" },
+    keyTakeaways: [{ type: String }],
+    mistakesToAvoid: [
+      {
+        mistake: { type: String, required: true },
+        whyBad: { type: String, default: "" },
+        correctFix: { type: String, default: "" },
+      },
+    ],
+    codeSnippets: [
+      {
+        title: { type: String, default: "" },
+        language: { type: String, default: "cpp" },
+        code: { type: String, required: true },
+        explanation: { type: String, default: "" },
+      },
+    ],
+    tags: [{ type: String, index: true }],
+    importance: {
+      type: String,
+      enum: ["Essential", "Important", "Good to Know"],
+      default: "Important",
+    },
+    isPinned: { type: Boolean, default: false, index: true },
+  },
+  { timestamps: true }
+);
+
+generalNoteSchema.index({ title: "text", summary: "text", content: "text", tags: "text" });
+
 const TopicModel = mongoose.model("Topic", topicSchema);
 export const Topic = (mongoose.models.Topic as typeof TopicModel) || TopicModel;
 
@@ -97,4 +144,9 @@ export const Problem = (mongoose.models.Problem as typeof ProblemModel) || Probl
 
 const ActivityModel = mongoose.model("Activity", activitySchema);
 export const Activity = (mongoose.models.Activity as typeof ActivityModel) || ActivityModel;
+
+const GeneralNoteModel = mongoose.model("GeneralNote", generalNoteSchema);
+export const GeneralNoteModelExport = (mongoose.models.GeneralNote as typeof GeneralNoteModel) || GeneralNoteModel;
+
 export { topicSeeds };
+

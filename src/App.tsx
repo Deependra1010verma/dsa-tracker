@@ -1,6 +1,9 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
 import { topicSubCategories } from "./data/categories";
-import type { Prerequisite, PatternFamilyItem } from "./api/types";
+import type { Prerequisite, PatternFamilyItem, GeneralNote } from "./api/types";
+import { GeneralNotesView } from "./components/GeneralNotesView";
+import { GeneralNoteModal } from "./components/GeneralNoteModal";
+
 
 type Difficulty = "Easy" | "Medium" | "Hard";
 type Status = "unsolved" | "solved" | "revisit" | "skipped";
@@ -1416,6 +1419,104 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(Boolean(persistedViewState.activeProblemId && persistedViewState.drawerOpen));
   const [activeProblem, setActiveProblem] = useState<Problem | null>(null);
   const [previewNoteProblem, setPreviewNoteProblem] = useState<Problem | null>(null);
+  const [generalNotes, setGeneralNotes] = useState<GeneralNote[]>([]);
+  const [generalNoteModalOpen, setGeneralNoteModalOpen] = useState(false);
+  const [editingGeneralNote, setEditingGeneralNote] = useState<GeneralNote | null>(null);
+
+  const loadGeneralNotes = useCallback(async () => {
+    try {
+      const res = await api<{ notes: GeneralNote[] }>("/api/general-notes");
+      if (res.notes && Array.isArray(res.notes)) {
+        setGeneralNotes(res.notes);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("dsa-tracker-general-notes", JSON.stringify(res.notes));
+        }
+        return;
+      }
+    } catch {
+      // fallback to localStorage
+    }
+    if (typeof window !== "undefined") {
+      const cached = window.localStorage.getItem("dsa-tracker-general-notes");
+      if (cached) {
+        try {
+          setGeneralNotes(JSON.parse(cached));
+        } catch {}
+      }
+    }
+  }, []);
+
+  const handleSaveGeneralNote = async (noteData: Partial<GeneralNote>) => {
+    if (editingGeneralNote) {
+      try {
+        const res = await api<{ note: GeneralNote }>(`/api/general-notes/${editingGeneralNote._id}`, {
+          method: "PATCH",
+          body: JSON.stringify(noteData),
+        });
+        if (res.note) {
+          setGeneralNotes((prev) => prev.map((n) => (n._id === res.note._id ? res.note : n)));
+          return;
+        }
+      } catch {}
+      setGeneralNotes((prev) =>
+        prev.map((n) =>
+          n._id === editingGeneralNote._id ? ({ ...n, ...noteData, updatedAt: new Date() } as GeneralNote) : n
+        )
+      );
+    } else {
+      try {
+        const res = await api<{ note: GeneralNote }>("/api/general-notes", {
+          method: "POST",
+          body: JSON.stringify(noteData),
+        });
+        if (res.note) {
+          setGeneralNotes((prev) => [res.note, ...prev]);
+          return;
+        }
+      } catch {}
+      const newNote: GeneralNote = {
+        _id: `note:${Date.now()}`,
+        title: noteData.title || "Untitled Note",
+        category: noteData.category || "Algorithmic Patterns",
+        summary: noteData.summary || "",
+        content: noteData.content || "",
+        keyTakeaways: noteData.keyTakeaways || [],
+        mistakesToAvoid: noteData.mistakesToAvoid || [],
+        codeSnippets: noteData.codeSnippets || [],
+        tags: noteData.tags || [],
+        importance: noteData.importance || "Important",
+        isPinned: Boolean(noteData.isPinned),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      setGeneralNotes((prev) => [newNote, ...prev]);
+    }
+  };
+
+  const handleDeleteGeneralNote = async (noteId: string) => {
+    try {
+      await api(`/api/general-notes/${noteId}`, { method: "DELETE" });
+    } catch {}
+    setGeneralNotes((prev) => prev.filter((n) => n._id !== noteId));
+  };
+
+  const handleTogglePinGeneralNote = async (note: GeneralNote) => {
+    const nextPinned = !note.isPinned;
+    try {
+      const res = await api<{ note: GeneralNote }>(`/api/general-notes/${note._id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isPinned: nextPinned }),
+      });
+      if (res.note) {
+        setGeneralNotes((prev) => prev.map((n) => (n._id === res.note._id ? res.note : n)));
+        return;
+      }
+    } catch {}
+    setGeneralNotes((prev) =>
+      prev.map((n) => (n._id === note._id ? { ...n, isPinned: nextPinned } : n))
+    );
+  };
+
 
   useEffect(() => {
     if (!previewNoteProblem) return;
@@ -1589,10 +1690,11 @@ export default function App() {
       setTopics(topicsRes.topics);
       setProblems(patchedProblems);
       setActivities(activitiesRes.activities);
+      void loadGeneralNotes();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     }
-  }, [selectedProblemSet]);
+  }, [loadGeneralNotes, selectedProblemSet]);
 
   async function loadData(options?: { silent?: boolean }) {
     try {
@@ -2571,7 +2673,7 @@ export default function App() {
         </button>
 
         <button
-          className={`topic-card ${statusFilter === "revisit" ? "active" : ""}`}
+          className={`topic-card ${statusFilter === "revisit" && selectedTopic !== "general_notes" ? "active" : ""}`}
           onClick={() => focusTopicList("all", "revisit")}
         >
           <div className="topic-dot revision-dot" />
@@ -2581,6 +2683,28 @@ export default function App() {
           </div>
           <span className="topic-count">{sidebarRevisionProblems.length}</span>
         </button>
+
+        <button
+          className={`topic-card ${selectedTopic === "general_notes" ? "active" : ""}`}
+          onClick={() => {
+            setSelectedTopic("general_notes");
+            setStatusFilter("all");
+            setMobileSidebarOpen(false);
+          }}
+          style={{
+            borderLeft: selectedTopic === "general_notes" ? "3px solid #38bdf8" : undefined,
+          }}
+        >
+          <div className="topic-dot" style={{ background: "#38bdf8" }} />
+          <div className="topic-copy">
+            <span className="topic-name">📓 General Notes</span>
+            <span className="topic-subtitle">Findings & Cheat-sheets</span>
+          </div>
+          <span className="topic-count" style={{ background: "rgba(56, 189, 248, 0.18)", color: "#38bdf8" }}>
+            {generalNotes.length}
+          </span>
+        </button>
+
 
         <div className="topic-list">
           {topics.map((topic) => {
@@ -2657,7 +2781,24 @@ export default function App() {
 
         {error ? <div className="banner error">{error}</div> : null}
 
-        <section className="stats-grid">
+        {selectedTopic === "general_notes" ? (
+          <GeneralNotesView
+            notes={generalNotes}
+            onOpenCreate={() => {
+              setEditingGeneralNote(null);
+              setGeneralNoteModalOpen(true);
+            }}
+            onOpenEdit={(note) => {
+              setEditingGeneralNote(note);
+              setGeneralNoteModalOpen(true);
+            }}
+            onDeleteNote={handleDeleteGeneralNote}
+            onTogglePinNote={handleTogglePinGeneralNote}
+            isFocusMode={isFocusMode}
+          />
+        ) : (
+          <>
+            <section className="stats-grid">
           <StatCard
             label="Total"
             value={visibleStats?.totalProblems ?? 0}
@@ -3098,6 +3239,8 @@ export default function App() {
         </section>
           </>
         )}
+          </>
+        )}
       </main>
 
       {drawerOpen ? (
@@ -3523,6 +3666,13 @@ export default function App() {
           onOpenLink={(prob) => openProblemLink(prob)}
         />
       ) : null}
+
+      <GeneralNoteModal
+        isOpen={generalNoteModalOpen}
+        note={editingGeneralNote}
+        onClose={() => setGeneralNoteModalOpen(false)}
+        onSave={handleSaveGeneralNote}
+      />
     </div>
   );
 

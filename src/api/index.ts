@@ -3,11 +3,12 @@ import express, { type RequestHandler } from "express";
 import path from "path";
 import { existsSync } from "fs";
 import { connectDb } from "./db.js";
-import { Activity, Problem, Topic, topicSeeds } from "./models.js";
+import { Activity, Problem, Topic, topicSeeds, GeneralNoteModelExport } from "./models.js";
 import { problemSeeds } from "./seed.js";
 import { problemSeeds2, topicSeeds2 } from "./seed2.js";
 import { problemSeeds3, topicSeeds3 } from "./seed3.js";
-import type { ActivityKind, ProblemStatus } from "./types.js";
+import type { ActivityKind, ProblemStatus, GeneralNote, GeneralNoteCategory, GeneralNoteImportance } from "./types.js";
+
 
 const allTopicSeeds = [
   ...topicSeeds.map(t => ({ ...t, problemSet: "set1" })),
@@ -19,6 +20,263 @@ const allProblemSeeds = [
   ...problemSeeds2.map(p => ({ ...p, problemSet: "set2" })),
   ...problemSeeds3.map(p => ({ ...p, problemSet: "set3" }))
 ];
+
+export const generalNoteSeeds: Array<Omit<GeneralNote, "_id" | "createdAt" | "updatedAt">> = [
+  {
+    title: "Sliding Window Pattern: Fixed vs Dynamic Windows & Invariants",
+    category: "Algorithmic Patterns",
+    importance: "Essential",
+    isPinned: true,
+    summary: "Complete blueprint for solving contiguous subarray/substring problems in O(N) time instead of O(N^2).",
+    content: `### Core Concept
+The Sliding Window technique converts an O(N²) nested loop search into an O(N) linear scan by reusing computations of overlapping contiguous elements.
+
+#### 1. Fixed-Size Window
+When window length **K** is fixed:
+- Initialize first window of size K.
+- Slide right pointer by 1, subtract leftmost element \`arr[i-K]\` and add rightmost \`arr[i]\`.
+
+#### 2. Dynamic-Size Window (Variable Length)
+When looking for min/max subarray matching a condition:
+- Expand right pointer \`right\` to include elements.
+- When condition is violated (or met for min window), shrink left pointer \`left\` while maintaining window invariant.`,
+    keyTakeaways: [
+      "Always check if contiguous subarray/substring is required. Non-contiguous arrays usually need Dynamic Programming or Hashing.",
+      "Use frequency arrays for ASCII strings (size 256 or 26) instead of HashMap for maximum O(1) performance in C++/Java.",
+      "Window length formula: (right - left + 1)."
+    ],
+    mistakesToAvoid: [
+      {
+        mistake: "Off-by-one errors in window size calculation.",
+        whyBad: "Using 'right - left' instead of 'right - left + 1' causes window count to be short by 1 element.",
+        correctFix: "Always use: int windowLen = right - left + 1;"
+      },
+      {
+        mistake: "Forgetting to shrink left pointer inside while loop.",
+        whyBad: "Causes infinite loop or invalid window expansion beyond array bounds.",
+        correctFix: "Ensure 'left++' is inside the condition shrink while loop."
+      }
+    ],
+    codeSnippets: [
+      {
+        title: "C++ Variable Sliding Window Template",
+        language: "cpp",
+        code: `int maxSubArrayLen(vector<int>& nums, int k) {
+    unordered_map<int, int> freq;
+    int left = 0, maxLen = 0;
+    
+    for (int right = 0; right < nums.size(); right++) {
+        freq[nums[right]]++;
+        
+        // Shrink window while condition is violated
+        while (/* condition violated, e.g. distinct elements > k */) {
+            freq[nums[left]]--;
+            if (freq[nums[left]] == 0) freq.erase(nums[left]);
+            left++;
+        }
+        
+        maxLen = max(maxLen, right - left + 1);
+    }
+    return maxLen;
+}`,
+        explanation: "Standard dynamic sliding window template maintaining frequency map and two pointers."
+      }
+    ],
+    tags: ["Sliding Window", "Two Pointers", "Subarray", "C++", "O(N)"]
+  },
+  {
+    title: "Binary Search Edge Cases: Never Get Stuck in Infinite Loops",
+    category: "Algorithmic Patterns",
+    importance: "Essential",
+    isPinned: true,
+    summary: "Universal template for Binary Search avoiding integer overflow and infinite while(low < high) loops.",
+    content: `### Binary Search Foundations
+Binary Search operates on a monotonic search space (sorted array or monotonic predicate function).
+
+#### Calculating Midpoint safely
+Never use \`mid = (low + high) / 2\` because \`low + high\` can overflow 32-bit signed integer limits ($2^{31} - 1$).
+Use: \`mid = low + (high - low) / 2\`
+
+#### Left Bias vs Right Bias
+- Left Bias (standard): \`mid = low + (high - low) / 2\` -> paired with \`low = mid + 1\` and \`high = mid\`.
+- Right Bias (upper bound): \`mid = low + (high - low + 1) / 2\` -> paired with \`high = mid - 1\` and \`low = mid\`.`,
+    keyTakeaways: [
+      "Identify the monotonic condition P(x): false false false ... true true true.",
+      "Lower Bound: smallest index i where arr[i] >= target.",
+      "Upper Bound: smallest index i where arr[i] > target."
+    ],
+    mistakesToAvoid: [
+      {
+        mistake: "Using low = mid with mid = low + (high - low) / 2 when low + 1 == high.",
+        whyBad: "mid evaluates to low, so low = mid does not advance low, causing an infinite while loop.",
+        correctFix: "Use right-biased mid calculation 'low + (high - low + 1) / 2' whenever setting low = mid."
+      },
+      {
+        mistake: "Integer overflow in binary search on answer range [1, 10^9].",
+        whyBad: "low + high exceeds 2 * 10^9 limit.",
+        correctFix: "Use long long or 'low + (high - low) / 2'."
+      }
+    ],
+    codeSnippets: [
+      {
+        title: "Universal Lower Bound Template (C++)",
+        language: "cpp",
+        code: `int lowerBound(vector<int>& nums, int target) {
+    int low = 0, high = nums.size(); // Range [0, N]
+    while (low < high) {
+        int mid = low + (high - low) / 2;
+        if (nums[mid] >= target) {
+            high = mid; // Narrow right boundary
+        } else {
+            low = mid + 1; // Narrow left boundary
+        }
+    }
+    return low; // First index where nums[i] >= target
+}`,
+        explanation: "Clean lower bound template returning index of first element >= target."
+      }
+    ],
+    tags: ["Binary Search", "Two Pointers", "Templates", "Edge Cases"]
+  },
+  {
+    title: "Monotonic Stack Pattern & Next Greater Element Boilerplate",
+    category: "Data Structures",
+    importance: "Important",
+    isPinned: false,
+    summary: "Monotonic Stack maintains elements in strict increasing or decreasing order to solve range/NGE problems in O(N).",
+    content: `### Monotonic Stack Insights
+When you need to find the **Next Greater Element**, **Next Smaller Element**, **Previous Greater Element**, or **Previous Smaller Element** for every element in an array in linear time O(N).
+
+#### Stack Invariants
+- **Monotonic Decreasing Stack**: Stack elements are ordered from largest (bottom) to smallest (top). Used for Next Greater Element.
+- **Monotonic Increasing Stack**: Stack elements are ordered from smallest (bottom) to largest (top). Used for Next Smaller Element (e.g. Largest Rectangle in Histogram).`,
+    keyTakeaways: [
+      "Always store indices in the stack instead of raw values, because index gives both value (arr[i]) and distance (i - stack.top()).",
+      "Process remaining elements in stack after linear loop if needed."
+    ],
+    mistakesToAvoid: [
+      {
+        mistake: "Pushing raw array values instead of array indices into stack.",
+        whyBad: "Prevents calculating distances or widths needed for histogram / trapping rain water problems.",
+        correctFix: "Push i (the index) into stack: st.push(i)."
+      }
+    ],
+    codeSnippets: [
+      {
+        title: "Next Greater Element Template",
+        language: "cpp",
+        code: `vector<int> nextGreaterElement(vector<int>& nums) {
+    int n = nums.size();
+    vector<int> res(n, -1);
+    stack<int> st; // Stores indices
+    
+    for (int i = 0; i < n; i++) {
+        while (!st.empty() && nums[st.top()] < nums[i]) {
+            res[st.top()] = nums[i];
+            st.pop();
+        }
+        st.push(i);
+    }
+    return res;
+}`,
+        explanation: "Monotonic decreasing stack that pops elements once a greater element is encountered."
+      }
+    ],
+    tags: ["Stack", "Monotonic Stack", "NGE", "Data Structures"]
+  },
+  {
+    title: "Top 10 DSA Interview Mistakes & Coding Anti-Patterns To Avoid",
+    category: "Mistakes & Anti-Patterns",
+    importance: "Essential",
+    isPinned: true,
+    summary: "Crucial checklist of traps to avoid during live technical interviews and problem solving.",
+    content: `### 1. Diving straight into code without clarifying requirements
+Never start typing code immediately after hearing a problem. First:
+1. Clarify constraints (N size, element bounds, negative values, duplicates).
+2. Talk through sample test cases & edge cases.
+3. State brute force complexity, then optimize.
+
+### 2. Modifying Array while Iterating
+Mutating an array or vector while looping through it alters indices and array length dynamically, producing subtle bugs.
+
+### 3. Missing Base Cases in Recursion / DFS
+Every recursive function MUST have a terminating condition before making child calls.`,
+    keyTakeaways: [
+      "Always test edge cases out loud: N=0, N=1, all negative, duplicates, INT_MAX.",
+      "Check time complexity vs constraints: N <= 10^5 requires O(N) or O(N log N). N <= 20 allows O(2^N)."
+    ],
+    mistakesToAvoid: [
+      {
+        mistake: "Jumping straight to code without writing dry run step-by-step.",
+        whyBad: "Leads to mid-code panic, incorrect logic, and wasted interview time.",
+        correctFix: "Write pseudo-code and test with small example input first."
+      },
+      {
+        mistake: "Using global or static variables across test cases.",
+        whyBad: "State leaks between consecutive test calls, breaking submission on LeetCode/platforms.",
+        correctFix: "Pass state via function parameters or class member variables initialized per call."
+      }
+    ],
+    codeSnippets: [],
+    tags: ["Interview Prep", "Best Practices", "Anti-Patterns", "Mindset"]
+  },
+  {
+    title: "Graph Traversal: BFS vs DFS Space Overhead & Visited Array Rules",
+    category: "Algorithmic Patterns",
+    importance: "Important",
+    isPinned: false,
+    summary: "Key differences in memory footprint, visited node marking placement, and shortest path properties.",
+    content: `### BFS vs DFS Comparison
+
+| Property | BFS (Breadth-First Search) | DFS (Depth-First Search) |
+|---|---|---|
+| **Data Structure** | Queue (FIFO) | Stack (LIFO / Recursion) |
+| **Shortest Path** | Guarantees shortest path in unweighted graph | Does NOT guarantee shortest path |
+| **Space Overhead** | O(W) where W is max width of graph | O(H) where H is max depth/height |
+
+### Critical Rule for BFS Visited Set
+Mark a node as visited **IMMEDIATELY when pushing it into the queue**, NOT when popping it! Marking on pop causes the same node to be pushed multiple times by adjacent neighbors, exploding queue size to exponential O(V^2).`,
+    keyTakeaways: [
+      "Mark visited at PUSH time in BFS to prevent duplicate queue entries.",
+      "Use BFS for shortest path in unweighted graphs or grid matrices."
+    ],
+    mistakesToAvoid: [
+      {
+        mistake: "Marking visited on queue pop instead of queue push.",
+        whyBad: "The same neighbor node gets added multiple times by different adjacent nodes before it gets popped, leading to TLE or MLE.",
+        correctFix: "Set visited[neighbor] = true inside the push loop."
+      }
+    ],
+    codeSnippets: [
+      {
+        title: "Correct BFS Queue Visited Marking (C++)",
+        language: "cpp",
+        code: `void bfs(int startNode, vector<vector<int>>& adj, int n) {
+    vector<bool> visited(n, false);
+    queue<int> q;
+    
+    q.push(startNode);
+    visited[startNode] = true; // Mark on push!
+    
+    while (!q.empty()) {
+        int curr = q.front();
+        q.pop();
+        
+        for (int neighbor : adj[curr]) {
+            if (!visited[neighbor]) {
+                visited[neighbor] = true; // Mark on push!
+                q.push(neighbor);
+            }
+        }
+    }
+}`,
+        explanation: "Standard BFS grid / graph traversal with proper push-time visited tracking."
+      }
+    ],
+    tags: ["Graph", "BFS", "DFS", "Shortest Path", "Space Complexity"]
+  }
+];
+
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -43,6 +301,7 @@ async function initializeStorage() {
     await connectDb(mongoUri);
     await ensureSeedTopics();
     await ensureSeedProblems();
+    await ensureSeedGeneralNotes();
     await backfillRevisionSchedules();
     await ensureActivityHistory();
     storageMode = "mongo";
@@ -662,6 +921,23 @@ async function ensureSeedProblems() {
     problemKey: { $nin: seededKeys },
   });
 }
+
+let memoryGeneralNotes: GeneralNote[] = generalNoteSeeds.map((seed, idx) => ({
+  _id: `note:${idx + 1}`,
+  ...seed,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+}));
+
+async function ensureSeedGeneralNotes() {
+  for (const seed of generalNoteSeeds) {
+    const existing = await GeneralNoteModelExport.findOne({ title: seed.title });
+    if (!existing) {
+      await GeneralNoteModelExport.create(seed);
+    }
+  }
+}
+
 
 function statusFromValue(value: unknown): ProblemStatus | "" {
   return value === "solved" || value === "unsolved" || value === "revisit" || value === "skipped"
@@ -1298,6 +1574,133 @@ app.delete(
     await Activity.deleteMany({ problem: req.params.id });
 
     res.json({ message: "Problem deleted" });
+  })
+);
+
+app.get(
+  "/api/general-notes",
+  asyncHandler(async (req, res) => {
+    const search = normalizeSearch(req.query.search);
+    const category = normalizeSearch(req.query.category);
+    const tag = normalizeSearch(req.query.tag);
+
+    if (storageMode === "memory") {
+      let filtered = memoryGeneralNotes.slice();
+      if (category && category !== "all") {
+        filtered = filtered.filter((n) => n.category === category);
+      }
+      if (tag && tag !== "all") {
+        filtered = filtered.filter((n) => n.tags.includes(tag));
+      }
+      if (search) {
+        const query = search.toLowerCase();
+        filtered = filtered.filter((n) =>
+          [n.title, n.summary, n.content, ...n.tags, ...(n.keyTakeaways ?? [])]
+            .join(" ")
+            .toLowerCase()
+            .includes(query)
+        );
+      }
+      filtered.sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+      res.json({ notes: filtered });
+      return;
+    }
+
+    const filter: Record<string, unknown> = {};
+    if (category && category !== "all") {
+      filter.category = category;
+    }
+    if (tag && tag !== "all") {
+      filter.tags = tag;
+    }
+    if (search) {
+      filter.$text = { $search: search };
+    }
+
+    const notes = await GeneralNoteModelExport.find(filter).sort({ isPinned: -1, updatedAt: -1 }).lean();
+    res.json({ notes });
+  })
+);
+
+app.post(
+  "/api/general-notes",
+  asyncHandler(async (req, res) => {
+    const body = req.body;
+    if (!body.title) {
+      res.status(400).json({ message: "Title is required" });
+      return;
+    }
+
+    if (storageMode === "memory") {
+      const newNote: GeneralNote = {
+        _id: `note:${Date.now()}`,
+        title: body.title,
+        category: body.category || "Algorithmic Patterns",
+        summary: body.summary || "",
+        content: body.content || "",
+        keyTakeaways: body.keyTakeaways || [],
+        mistakesToAvoid: body.mistakesToAvoid || [],
+        codeSnippets: body.codeSnippets || [],
+        tags: body.tags || [],
+        importance: body.importance || "Important",
+        isPinned: Boolean(body.isPinned),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      memoryGeneralNotes = [newNote, ...memoryGeneralNotes];
+      res.json({ note: newNote });
+      return;
+    }
+
+    const note = await GeneralNoteModelExport.create(body);
+    res.json({ note });
+  })
+);
+
+app.patch(
+  "/api/general-notes/:id",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const body = req.body;
+
+    if (storageMode === "memory") {
+      const idx = memoryGeneralNotes.findIndex((n) => n._id === id);
+      if (idx === -1) {
+        res.status(404).json({ message: "Note not found" });
+        return;
+      }
+      const updated = {
+        ...memoryGeneralNotes[idx],
+        ...body,
+        updatedAt: new Date(),
+      };
+      memoryGeneralNotes[idx] = updated;
+      res.json({ note: updated });
+      return;
+    }
+
+    const updated = await GeneralNoteModelExport.findByIdAndUpdate(id, { $set: body }, { new: true }).lean();
+    if (!updated) {
+      res.status(404).json({ message: "Note not found" });
+      return;
+    }
+    res.json({ note: updated });
+  })
+);
+
+app.delete(
+  "/api/general-notes/:id",
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    if (storageMode === "memory") {
+      memoryGeneralNotes = memoryGeneralNotes.filter((n) => n._id !== id);
+      res.json({ message: "Note deleted" });
+      return;
+    }
+
+    await GeneralNoteModelExport.findByIdAndDelete(id);
+    res.json({ message: "Note deleted" });
   })
 );
 
