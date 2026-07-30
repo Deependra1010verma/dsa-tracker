@@ -2838,23 +2838,25 @@ export default function App() {
           </section>
         ) : null}
 
-        <ActivityInsightsPanel
-          insights={activityInsights}
-          scopeLabel={selectedTopicData?.name ?? "All topics"}
-          onOpenProblem={(problemId) => {
-            const matchedProblem = problems.find((problem) => problem._id === problemId);
-            if (matchedProblem) {
-              openStudyView(matchedProblem);
-            }
-          }}
-          onCompleteRevision={(problemId) => {
-            const matchedProblem = problems.find((problem) => problem._id === problemId);
-            if (matchedProblem) {
-              void completeRevision(matchedProblem);
-            }
-          }}
-          onFilterTopic={(topicId) => focusTopicList(topicId, "all")}
-        />
+        {selectedTopic === "all" ? (
+          <ActivityInsightsPanel
+            insights={activityInsights}
+            scopeLabel={selectedTopicData?.name ?? "All topics"}
+            onOpenProblem={(problemId) => {
+              const matchedProblem = problems.find((problem) => problem._id === problemId);
+              if (matchedProblem) {
+                openStudyView(matchedProblem);
+              }
+            }}
+            onCompleteRevision={(problemId) => {
+              const matchedProblem = problems.find((problem) => problem._id === problemId);
+              if (matchedProblem) {
+                void completeRevision(matchedProblem);
+              }
+            }}
+            onFilterTopic={(topicId) => focusTopicList(topicId, "all")}
+          />
+        ) : null}
 
         {statusFilter === "revisit" && revisionProblems.length > 0 ? (
           <section className="revision-panel">
