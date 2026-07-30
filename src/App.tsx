@@ -2838,7 +2838,7 @@ export default function App() {
           </section>
         ) : null}
 
-        {selectedTopic === "all" ? (
+        {statusFilter === "revisit" ? (
           <ActivityInsightsPanel
             insights={activityInsights}
             scopeLabel={selectedTopicData?.name ?? "All topics"}
