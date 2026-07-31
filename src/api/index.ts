@@ -1512,11 +1512,7 @@ app.post(
         problem.solvedAt = problem.solvedAt ?? new Date();
       }
 
-      if (!problem.nextRevisionAt) {
-        startRevisionSchedule(problem);
-      } else {
-        advanceRevisionSchedule(problem);
-      }
+      advanceRevisionSchedule(problem);
 
       problem.updatedAt = new Date();
       appendMemoryActivity(problem, "revision", problem.lastRevisionAt ?? problem.updatedAt);
@@ -1536,11 +1532,7 @@ app.post(
       problem.solvedAt = problem.solvedAt ?? new Date();
     }
 
-    if (!problem.nextRevisionAt) {
-      startRevisionSchedule(problem);
-    } else {
-      advanceRevisionSchedule(problem);
-    }
+    advanceRevisionSchedule(problem);
 
     await problem.save();
     await recordMongoActivity(problem, "revision", problem.lastRevisionAt ?? new Date());

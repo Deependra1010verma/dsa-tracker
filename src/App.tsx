@@ -1546,6 +1546,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [workspaceSaveState, setWorkspaceSaveState] = useState<WorkspaceSaveState>("idle");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [completingRevisionIds, setCompletingRevisionIds] = useState<Set<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
   const [isFocusMode, setIsFocusMode] = useState<boolean>(() => {
@@ -2470,6 +2471,7 @@ export default function App() {
 
   const completeRevision = useCallback(async (problem: Problem) => {
     try {
+      setCompletingRevisionIds((prev) => new Set(prev).add(problem._id));
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/revision`, {
         method: "POST",
       });
@@ -2480,6 +2482,12 @@ export default function App() {
       void loadData({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update revision schedule");
+    } finally {
+      setCompletingRevisionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(problem._id);
+        return next;
+      });
     }
   }, [activeProblem, setError, setActiveProblem, upsertProblem]);
 
@@ -2873,31 +2881,51 @@ export default function App() {
                 <p className="revision-stack-label">Due now</p>
                 <div className="revision-list">
                   {dueRevisionProblems.length > 0 ? (
-                    dueRevisionProblems.map(({ problem, state }) => (
-                      <article key={problem._id} className={`revision-item ${state.isOverdue ? "overdue" : "due"}`}>
-                        <button
-                          className={`revision-check ${state.isComplete ? "checked" : ""}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void completeRevision(problem);
-                          }}
-                          aria-label="Mark revision complete"
-                          title="Mark done"
-                        >
-                          {state.isComplete ? "✓" : ""}
-                        </button>
-                        <div className="revision-item-copy">
-                          <strong>{problem.title}</strong>
-                          <span>{state.subtitle}</span>
-                        </div>
-                        <span className="revision-priority-pill">
-                          {getRevisionQueueMeta(problem, state).label}
-                        </span>
-                        <button className="revision-action" onClick={() => openProblemLink(problem)}>
-                          Revise
-                        </button>
-                      </article>
-                    ))
+                    dueRevisionProblems.map(({ problem, state }) => {
+                      const isChecked = state.isComplete || completingRevisionIds.has(problem._id);
+                      return (
+                        <article key={problem._id} className={`revision-item ${state.isOverdue ? "overdue" : "due"}`}>
+                          <button
+                            className={`revision-check ${isChecked ? "checked" : ""}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void completeRevision(problem);
+                            }}
+                            aria-label="Mark revision complete"
+                            title="Mark done"
+                            disabled={completingRevisionIds.has(problem._id)}
+                          >
+                            {isChecked ? "✓" : ""}
+                          </button>
+                          <div className="revision-item-copy">
+                            <strong>{problem.title}</strong>
+                            <span>{state.subtitle}</span>
+                          </div>
+                          <span className="revision-priority-pill">
+                            {getRevisionQueueMeta(problem, state).label}
+                          </span>
+                          <div className="revision-item-actions">
+                            <button
+                              type="button"
+                              className="table-workspace-btn revision-workspace-btn"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleWorkspaceClick(problem);
+                              }}
+                              title="Open Problem Workspace"
+                            >
+                              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
+                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                              </svg>
+                            </button>
+                            <button className="revision-action" onClick={() => openProblemLink(problem)}>
+                              Revise
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })
                   ) : (
                     <div className="revision-empty">No revision is due right now.</div>
                   )}
@@ -2917,9 +2945,25 @@ export default function App() {
                         <span className="revision-priority-pill subtle">
                           {getRevisionQueueMeta(problem, state).label}
                         </span>
-                        <button className="revision-action ghost" onClick={() => openStudyView(problem)}>
-                          Open
-                        </button>
+                        <div className="revision-item-actions">
+                          <button
+                            type="button"
+                            className="table-workspace-btn revision-workspace-btn"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleWorkspaceClick(problem);
+                            }}
+                            title="Open Problem Workspace"
+                          >
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
+                              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                              <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                            </svg>
+                          </button>
+                          <button className="revision-action ghost" onClick={() => handleWorkspaceClick(problem)}>
+                            Open
+                          </button>
+                        </div>
                       </article>
                     ))
                   ) : (

@@ -1048,6 +1048,34 @@ button {
   color: #bae6fd;
 }
 
+.revision-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.revision-workspace-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+  color: #38bdf8;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.revision-workspace-btn:hover {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #e0f2fe;
+  transform: translateY(-1px);
+}
+
 .revision-action,
 .revision-inline-action {
   border: 1px solid rgba(125, 211, 252, 0.24);
