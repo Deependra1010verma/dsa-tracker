@@ -76,14 +76,17 @@ export type GeneralNoteImportance = "Essential" | "Important" | "Good to Know";
 
 export type CodeSnippetItem = {
   title?: string;
+  name?: string;
   language?: string;
   code: string;
   explanation?: string;
 };
 
 export type MistakeItem = {
-  mistake: string;
+  mistake?: string;
+  whatWentWrong?: string;
   whyBad?: string;
+  whyItFailed?: string;
   correctFix?: string;
 };
 

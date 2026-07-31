@@ -1845,7 +1845,7 @@ export default function App() {
     const needle = deferredSearch.trim().toLowerCase();
     return problems.filter((problem) => {
       const categories = problemCategoryMap.get(problem._id) ?? getProblemCategories(problem);
-      const matchesTopic = selectedTopic === "all" || Boolean(needle) || problem.topic._id === selectedTopic;
+      const matchesTopic = selectedTopic === "all" || problem.topic._id === selectedTopic;
       const matchesStatus =
         statusFilter === "all"
           ? true
@@ -1921,7 +1921,7 @@ export default function App() {
         if (titleDelta !== 0) return titleDelta;
       }
 
-      if (selectedTopic === "all" || Boolean(deferredSearch.trim())) {
+      if (selectedTopic === "all") {
         const topicOrderDelta = left.topic.order - right.topic.order;
         if (topicOrderDelta !== 0) {
           return topicOrderDelta;
@@ -3183,9 +3183,7 @@ export default function App() {
               <p className="panel-label">Problems</p>
               <h3>{filteredProblems.length} records</h3>
             </div>
-            <span className="section-note">
-              {deferredSearch.trim() ? "All Topics (Search)" : selectedTopicData ? selectedTopicData.name : "All"}
-            </span>
+            <span className="section-note">{selectedTopicData ? selectedTopicData.name : "All"}</span>
           </div>
 
           {loading ? (
@@ -3210,7 +3208,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedTopic === "all" || Boolean(deferredSearch.trim())
+                  {selectedTopic === "all"
                     ? groupedByTopicAndSection.map((group) => {
                         const isExpanded = expandedTopics.has(group.topicId) || Boolean(deferredSearch.trim());
                         return (

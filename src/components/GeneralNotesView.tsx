@@ -62,7 +62,7 @@ export function GeneralNotesView({
       const matchCategoryText = note.category.toLowerCase().includes(query);
       const matchTags = (note.tags || []).some((t) => t.toLowerCase().includes(query));
       const matchSnippets = (note.codeSnippets || []).some(
-        (s) => s.name.toLowerCase().includes(query) || s.code.toLowerCase().includes(query)
+        (s) => (s.name || s.title || "").toLowerCase().includes(query) || s.code.toLowerCase().includes(query)
       );
 
       return matchCategory && matchTag && (matchTitle || matchSummary || matchCategoryText || matchTags || matchSnippets);
@@ -301,14 +301,14 @@ export function GeneralNotesView({
           ) : (
             <div className="vnotes-snippets-grid">
               {allSnippets.map(({ noteTitle, category, snippet }, index) => {
-                const snipId = `snip-${index}-${snippet.name}`;
+                const snipId = `snip-${index}-${snippet.name || snippet.title || index}`;
                 const isCopied = copiedSnippetId === snipId;
                 return (
                   <div key={snipId} className="vnotes-snippet-card">
                     <div className="snippet-card-header">
                       <div className="snippet-meta">
                         <span className="snippet-lang-pill">{snippet.language || "cpp"}</span>
-                        <h4 className="snippet-title">{snippet.name}</h4>
+                        <h4 className="snippet-title">{snippet.name || snippet.title || "Snippet"}</h4>
                       </div>
                       <button
                         className={`snippet-copy-action ${isCopied ? "copied" : ""}`}
@@ -350,7 +350,7 @@ export function GeneralNotesView({
                   <div className="matrix-card-head">
                     <div className="matrix-title-group">
                       <span className="matrix-warning-badge">⚠️ PITFALL #{index + 1}</span>
-                      <h4>{mistake.whatWentWrong}</h4>
+                      <h4>{mistake.whatWentWrong || mistake.mistake}</h4>
                     </div>
                     <span className="matrix-source-tag">{noteTitle}</span>
                   </div>
@@ -362,7 +362,7 @@ export function GeneralNotesView({
                         <span className="icon">❌</span>
                         <span>ANTI-PATTERN / WHY IT FAILS</span>
                       </div>
-                      <p className="col-body">{mistake.whyItFailed || mistake.whatWentWrong}</p>
+                      <p className="col-body">{mistake.whyItFailed || mistake.whyBad || mistake.whatWentWrong || mistake.mistake}</p>
                     </div>
 
                     {/* Right: Optimal Fix Column */}
@@ -536,10 +536,10 @@ function CenteredInspectModal({
                 {note.mistakesToAvoid.map((m, i) => (
                   <div key={i} className="vmodal-mistake-card">
                     <div className="mistake-head">
-                      <span>⚠️ <strong>{m.whatWentWrong}</strong></span>
+                      <span>⚠️ <strong>{m.whatWentWrong || m.mistake}</strong></span>
                     </div>
-                    {m.whyItFailed ? (
-                      <p className="mistake-fail"><span className="bad-tag">Why it fails:</span> {m.whyItFailed}</p>
+                    {m.whyItFailed || m.whyBad ? (
+                      <p className="mistake-fail"><span className="bad-tag">Why it fails:</span> {m.whyItFailed || m.whyBad}</p>
                     ) : null}
                     {m.correctFix ? (
                       <p className="mistake-fix"><span className="fix-tag">Correct Fix:</span> {m.correctFix}</p>
@@ -562,7 +562,7 @@ function CenteredInspectModal({
                     <div key={i} className="vmodal-snippet-box">
                       <div className="snippet-box-head">
                         <span className="snippet-name">
-                          <code className="lang-tag">{snippet.language || "cpp"}</code> {snippet.name}
+                          <code className="lang-tag">{snippet.language || "cpp"}</code> {snippet.name || snippet.title || "Snippet"}
                         </span>
                         <button
                           className={`snippet-copy-btn ${isCopied ? "copied" : ""}`}

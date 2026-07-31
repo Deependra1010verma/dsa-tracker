@@ -71,8 +71,8 @@ export function GeneralNoteModal({ isOpen, note, onClose, onSave }: GeneralNoteM
       const cleanedTakeaways = keyTakeaways.map((t) => t.trim()).filter(Boolean);
       const cleanedMistakes = mistakesToAvoid
         .map((m) => ({
-          mistake: m.mistake.trim(),
-          whyBad: m.whyBad?.trim() || "",
+          mistake: (m.mistake || m.whatWentWrong || "").trim(),
+          whyBad: m.whyBad?.trim() || m.whyItFailed?.trim() || "",
           correctFix: m.correctFix?.trim() || "",
         }))
         .filter((m) => Boolean(m.mistake));
