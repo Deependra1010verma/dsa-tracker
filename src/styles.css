@@ -1025,6 +1025,22 @@ button {
   gap: 10px;
 }
 
+.activity-show-more-btn {
+  justify-self: start;
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.activity-show-more-btn:hover {
+  border-color: rgba(56, 189, 248, 0.34);
+  background: rgba(56, 189, 248, 0.08);
+}
+
 .activity-detail-item {
   display: flex;
   justify-content: space-between;

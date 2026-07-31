@@ -979,14 +979,18 @@ async function backfillRevisionSchedules() {
 }
 
 async function ensureActivityHistory() {
-  const problems = await Problem.find().select("_id topic solvedAt revisitAt lastRevisionAt revisionCompletedAt");
+  const problems = await Problem.find().select("_id topic status solvedAt revisitAt lastRevisionAt revisionCompletedAt updatedAt");
 
   for (const problem of problems) {
     if (problem.solvedAt) {
       await recordMongoActivity(problem, "solved", problem.solvedAt);
+    } else if (problem.status === "solved") {
+      await recordMongoActivity(problem, "solved", coerceDate(problem.updatedAt));
     }
     if (problem.revisitAt) {
       await recordMongoActivity(problem, "revisit", problem.revisitAt);
+    } else if (problem.status === "revisit") {
+      await recordMongoActivity(problem, "revisit", coerceDate(problem.updatedAt));
     }
     if (problem.revisionCompletedAt) {
       await recordMongoActivity(problem, "revision", problem.revisionCompletedAt);
@@ -1143,11 +1147,16 @@ app.get(
   "/api/activity",
   asyncHandler(async (req, res) => {
     const topic = normalizeSearch(req.query.topic);
+    const problemSet = normalizeSearch(req.query.set);
     const limit = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 5000);
 
     if (storageMode === "memory") {
+      const problemIdsForSet = problemSet
+        ? new Set(memoryProblems.filter((problem) => problem.topic.problemSet === problemSet).map((problem) => problem._id))
+        : null;
       const activities = memoryActivities
         .filter((activity) => !topic || activity.topicId === topic)
+        .filter((activity) => !problemIdsForSet || problemIdsForSet.has(activity.problemId))
         .slice()
         .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
         .slice(0, limit)
@@ -1161,6 +1170,10 @@ app.get(
     const filter: Record<string, unknown> = {};
     if (topic) {
       filter.topic = topic;
+    }
+    if (problemSet) {
+      const topicIds = await Topic.find({ problemSet }).distinct("_id");
+      filter.topic = topic ? topic : { $in: topicIds };
     }
 
     const activities = await Activity.find(filter)

@@ -1108,6 +1108,7 @@ function readPersistedViewState(): PersistedViewState {
 }
 
 const LOCAL_PROGRESS_STORAGE_KEY = "dsa-tracker-local-user-progress";
+const LOCAL_ACTIVITY_STORAGE_PREFIX = "dsa-tracker-activity-history";
 
 type SavedProblemProgress = {
   status?: Status;
@@ -1149,6 +1150,55 @@ function removeLocalProgressItem(key: string) {
     const current = readLocalProgress();
     delete current[key];
     window.localStorage.setItem(LOCAL_PROGRESS_STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    // ignore storage error
+  }
+}
+
+function activityStorageKey(problemSet: string) {
+  return `${LOCAL_ACTIVITY_STORAGE_PREFIX}:${problemSet || "set1"}`;
+}
+
+function getActivityDedupeKey(activity: ActivityRecord) {
+  const date = toValidDate(activity.occurredAt);
+  return [
+    activity.problem?._id ?? "",
+    activity.kind,
+    activity.topic?._id ?? "",
+    date ? Math.floor(date.getTime() / 1000) : activity.occurredAt,
+  ].join(":");
+}
+
+function mergeActivityRecords(...activityGroups: ActivityRecord[][]) {
+  const map = new Map<string, ActivityRecord>();
+  for (const activity of activityGroups.flat()) {
+    if (!activity?.problem?._id || !activity?.topic?._id || !toValidDate(activity.occurredAt)) {
+      continue;
+    }
+    map.set(getActivityDedupeKey(activity), activity);
+  }
+
+  return [...map.values()].sort((left, right) => {
+    const leftTime = toValidDate(left.occurredAt)?.getTime() ?? 0;
+    const rightTime = toValidDate(right.occurredAt)?.getTime() ?? 0;
+    return rightTime - leftTime;
+  });
+}
+
+function readLocalActivities(problemSet: string): ActivityRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(activityStorageKey(problemSet));
+    return raw ? (JSON.parse(raw) as ActivityRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalActivities(problemSet: string, activities: ActivityRecord[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(activityStorageKey(problemSet), JSON.stringify(activities.slice(0, 5000)));
   } catch {
     // ignore storage error
   }
@@ -1702,9 +1752,11 @@ export default function App() {
         return problem;
       });
 
+      const mergedActivities = mergeActivityRecords(activitiesRes.activities, readLocalActivities(selectedProblemSet));
       setTopics(topicsRes.topics);
       setProblems(patchedProblems);
-      setActivities(activitiesRes.activities);
+      setActivities(mergedActivities);
+      writeLocalActivities(selectedProblemSet, mergedActivities);
       void loadGeneralNotes();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -1754,10 +1806,12 @@ export default function App() {
           problem,
           topic,
         };
-        return [nextActivity, ...current];
+        const nextActivities = mergeActivityRecords([nextActivity], current);
+        writeLocalActivities(selectedProblemSet, nextActivities);
+        return nextActivities;
       });
     },
-    []
+    [selectedProblemSet]
   );
 
   const openProblemLink = useCallback((problem: Problem) => {
@@ -3926,6 +3980,7 @@ function ActivityInsightsPanel({
 }) {
   const weekdayLabels = ["M", "T", "W", "T", "F", "S", "S"];
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
+  const [expandedActivityDateKey, setExpandedActivityDateKey] = useState<string | null>(null);
   const allDays = useMemo(() => insights.weeks.flatMap((week) => week.days), [insights.weeks]);
   const selectedDay =
     allDays.find((day) => day.dateKey === selectedDateKey) ??
@@ -3989,6 +4044,9 @@ function ActivityInsightsPanel({
 
     return [...grouped.values()].sort((left, right) => left.problemTitle.localeCompare(right.problemTitle));
   }, [selectedDay]);
+  const visibleSelectedItems =
+    expandedActivityDateKey === selectedDay?.dateKey ? groupedSelectedItems : groupedSelectedItems.slice(0, 5);
+  const hiddenSelectedItemCount = Math.max(groupedSelectedItems.length - visibleSelectedItems.length, 0);
   const needsTodayAction = insights.todayCount === 0;
   const streakGuardMessage =
     insights.currentStreak > 0
@@ -4119,7 +4177,7 @@ function ActivityInsightsPanel({
 
             {selectedDay.total > 0 ? (
               <div className="activity-detail-list">
-                {groupedSelectedItems.map((item) => (
+                {visibleSelectedItems.map((item) => (
                   <article key={`${selectedDay.dateKey}-${item.problemId}`} className="activity-detail-item">
                     <div className="activity-detail-copy">
                       <strong>{item.problemTitle}</strong>
@@ -4153,6 +4211,19 @@ function ActivityInsightsPanel({
                     </div>
                   </article>
                 ))}
+                {groupedSelectedItems.length > 5 ? (
+                  <button
+                    type="button"
+                    className="activity-show-more-btn"
+                    onClick={() =>
+                      setExpandedActivityDateKey((current) =>
+                        current === selectedDay.dateKey ? null : selectedDay.dateKey
+                      )
+                    }
+                  >
+                    {hiddenSelectedItemCount > 0 ? `Show ${hiddenSelectedItemCount} more` : "Show less"}
+                  </button>
+                ) : null}
               </div>
             ) : (
               <div className="activity-empty-day">No recorded practice on this day.</div>
