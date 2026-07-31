@@ -1548,6 +1548,7 @@ export default function App() {
     setSelectedTopic("all");
     setDrawerOpen(false);
     setActiveProblem(null);
+    setHiddenRevisionIds(new Set());
   }, [selectedProblemSet]);
 
   const [drawerMode, setDrawerMode] = useState<"edit" | "notes">(persistedViewState.drawerMode ?? "notes");
@@ -2167,6 +2168,10 @@ export default function App() {
         return rightTime - leftTime;
       });
   }, [hiddenRevisionIds, nowDate, problems, revisionStateMap]);
+
+  const nextRevisionCandidate = dueRevisionProblems[0]?.problem ?? sidebarRevisionProblems[0]?.problem ?? null;
+  const showRevisionDashboard =
+    statusFilter === "revisit" && (revisionProblems.length > 0 || revisedSessionProblems.length > 0);
 
   const toggleTopicExpanded = useCallback((topicId: string) => {
     setExpandedTopics((prev) => {
@@ -2935,25 +2940,61 @@ export default function App() {
           />
         ) : null}
 
-        {statusFilter === "revisit" && revisionProblems.length > 0 ? (
-          <section className="revision-panel">
-            <div className="section-heading revision-heading">
+        {showRevisionDashboard ? (
+          <section className="revision-panel revision-dashboard">
+            <div className="revision-dashboard-head">
               <div>
-              <p className="panel-label">Spaced repetition</p>
-                <h3>{dueRevisionProblems.length} due now</h3>
+                <p className="panel-label">Spaced repetition</p>
+                <h3>Revision queue</h3>
+                <p className="section-note">{revisionProblems.length} active items scheduled for revisit</p>
               </div>
-              <span className="section-note">{revisionProblems.length} scheduled for revisit</span>
+              <div className="revision-head-actions">
+                {revisedSessionProblems.length > 0 ? (
+                  <button className="revision-action ghost" onClick={() => setHiddenRevisionIds(new Set())}>
+                    Clear revised
+                  </button>
+                ) : null}
+                <button
+                  className="revision-action"
+                  disabled={!nextRevisionCandidate}
+                  onClick={() => {
+                    if (nextRevisionCandidate) {
+                      startRevisionPractice(nextRevisionCandidate);
+                    }
+                  }}
+                >
+                  Start next
+                </button>
+              </div>
             </div>
 
-            <div className="revision-grid">
-              <div className="revision-stack">
-                <p className="revision-stack-label">Due now</p>
+            <div className="revision-metrics">
+              <div className="revision-metric-card urgent">
+                <span>Due</span>
+                <strong>{dueRevisionProblems.length}</strong>
+              </div>
+              <div className="revision-metric-card">
+                <span>Coming up</span>
+                <strong>{sidebarRevisionProblems.length}</strong>
+              </div>
+              <div className="revision-metric-card done">
+                <span>Revised</span>
+                <strong>{revisedSessionProblems.length}</strong>
+              </div>
+            </div>
+
+            <div className="revision-board">
+              <div className="revision-lane due-lane">
+                <div className="revision-lane-head">
+                  <span className="revision-lane-kicker">Now</span>
+                  <strong>Due to revise</strong>
+                </div>
                 <div className="revision-list">
                   {dueRevisionProblems.length > 0 ? (
                     dueRevisionProblems.map(({ problem, state }) => {
                       const isChecked = state.isComplete || completingRevisionIds.has(problem._id);
                       return (
-                        <article key={problem._id} className={`revision-item ${state.isOverdue ? "overdue" : "due"}`}>
+                        <article key={problem._id} className={`revision-card ${state.isOverdue ? "overdue" : "due"}`}>
                           <button
                             className={`revision-check ${isChecked ? "checked" : ""}`}
                             onClick={(event) => {
@@ -2966,8 +3007,8 @@ export default function App() {
                           >
                             {isChecked ? "✓" : ""}
                           </button>
-                          <div className="revision-item-copy">
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div className="revision-card-copy">
+                            <div className="revision-title-row">
                               <strong>{problem.title}</strong>
                               <button
                                 type="button"
@@ -2976,7 +3017,7 @@ export default function App() {
                                   event.stopPropagation();
                                   handleWorkspaceClick(problem);
                                 }}
-                                title="Open Problem Workspace"
+                                title="Open Problem Overview"
                               >
                                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
                                   <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
@@ -2984,14 +3025,16 @@ export default function App() {
                                 </svg>
                               </button>
                             </div>
-                            <span>{state.subtitle}</span>
+                            <div className="revision-meta-row">
+                              <span>{state.subtitle}</span>
+                              <span>{problem.topic.name}</span>
+                              <span>{problem.difficulty}</span>
+                            </div>
                           </div>
-                          <span className="revision-priority-pill">
-                            {getRevisionQueueMeta(problem, state).label}
-                          </span>
-                          <div className="revision-item-actions">
+                          <div className="revision-card-actions">
+                            <span className="revision-priority-pill">{getRevisionQueueMeta(problem, state).label}</span>
                             <button className="revision-action" onClick={() => startRevisionPractice(problem)}>
-                              Revise
+                              Open
                             </button>
                           </div>
                         </article>
@@ -3003,26 +3046,82 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="revision-stack">
-                <p className="revision-stack-label">Next up</p>
+              <div className="revision-lane">
+                <div className="revision-lane-head">
+                  <span className="revision-lane-kicker">Later</span>
+                  <strong>Coming up</strong>
+                </div>
                 <div className="revision-list">
                   {sidebarRevisionProblems.length > 0 ? (
-                    sidebarRevisionProblems.map(({ problem, state }) => (
-                      <article key={problem._id} className="revision-item upcoming">
-                        <button
-                          className={`revision-check ${completingRevisionIds.has(problem._id) ? "checked" : ""}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void completeRevision(problem);
-                          }}
-                          aria-label="Mark revision complete"
-                          title="Mark done"
-                          disabled={completingRevisionIds.has(problem._id)}
-                        >
-                          {completingRevisionIds.has(problem._id) ? "✓" : ""}
+                    sidebarRevisionProblems.map(({ problem, state }) => {
+                      const isChecked = completingRevisionIds.has(problem._id);
+                      return (
+                        <article key={problem._id} className="revision-card upcoming">
+                          <button
+                            className={`revision-check ${isChecked ? "checked" : ""}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void completeRevision(problem);
+                            }}
+                            aria-label="Mark revision complete"
+                            title="Mark done"
+                            disabled={completingRevisionIds.has(problem._id)}
+                          >
+                            {isChecked ? "✓" : ""}
+                          </button>
+                          <div className="revision-card-copy">
+                            <div className="revision-title-row">
+                              <strong>{problem.title}</strong>
+                              <button
+                                type="button"
+                                className="table-workspace-btn revision-workspace-btn"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleWorkspaceClick(problem);
+                                }}
+                                title="Open Problem Overview"
+                              >
+                                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
+                                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                  <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                                </svg>
+                              </button>
+                            </div>
+                            <div className="revision-meta-row">
+                              <span>{state.subtitle}</span>
+                              <span>{problem.topic.name}</span>
+                              <span>{problem.difficulty}</span>
+                            </div>
+                          </div>
+                          <div className="revision-card-actions">
+                            <span className="revision-priority-pill subtle">{getRevisionQueueMeta(problem, state).label}</span>
+                            <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
+                              Open
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })
+                  ) : (
+                    <div className="revision-empty">No upcoming revisions scheduled.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="revision-lane revised-lane">
+                <div className="revision-lane-head">
+                  <span className="revision-lane-kicker">Session</span>
+                  <strong>Revised now</strong>
+                </div>
+                <div className="revision-list">
+                  {revisedSessionProblems.length > 0 ? (
+                    revisedSessionProblems.map(({ problem, state }) => (
+                      <article key={problem._id} className="revision-card revised">
+                        <button className="revision-check checked" disabled aria-label="Revision completed">
+                          ✓
                         </button>
-                        <div className="revision-item-copy">
-                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <div className="revision-card-copy">
+                          <div className="revision-title-row">
                             <strong>{problem.title}</strong>
                             <button
                               type="button"
@@ -3031,7 +3130,7 @@ export default function App() {
                                 event.stopPropagation();
                                 handleWorkspaceClick(problem);
                               }}
-                              title="Open Problem Workspace"
+                              title="Open Problem Overview"
                             >
                               <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
                                 <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
@@ -3039,12 +3138,13 @@ export default function App() {
                               </svg>
                             </button>
                           </div>
-                          <span>{state.subtitle}</span>
+                          <div className="revision-meta-row">
+                            <span>{state.isComplete ? "Revision cycle complete" : state.subtitle}</span>
+                            <span>{problem.topic.name}</span>
+                          </div>
                         </div>
-                        <span className="revision-priority-pill subtle">
-                          {getRevisionQueueMeta(problem, state).label}
-                        </span>
-                        <div className="revision-item-actions">
+                        <div className="revision-card-actions">
+                          <span className="revision-priority-pill complete">Revised</span>
                           <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
                             Open
                           </button>
@@ -3052,61 +3152,11 @@ export default function App() {
                       </article>
                     ))
                   ) : (
-                    <div className="revision-empty">No upcoming revisions scheduled.</div>
+                    <div className="revision-empty">Completed revisions will appear here.</div>
                   )}
                 </div>
               </div>
             </div>
-
-            <div className="revision-summary-strip">
-              <span>{revisionProblems.length} items in revisit queue</span>
-              <span>{dueRevisionProblems.length} due now</span>
-              <span>{sidebarRevisionProblems.length} upcoming</span>
-              <span>{revisedSessionProblems.length} revised</span>
-            </div>
-
-            {revisedSessionProblems.length > 0 ? (
-              <div className="revision-stack revised-stack">
-                <p className="revision-stack-label">Revised in this session</p>
-                <div className="revision-list">
-                  {revisedSessionProblems.map(({ problem, state }) => (
-                    <article key={problem._id} className="revision-item upcoming">
-                      <button className="revision-check checked" disabled aria-label="Revision completed">
-                        ✓
-                      </button>
-                      <div className="revision-item-copy">
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <strong>{problem.title}</strong>
-                          <button
-                            type="button"
-                            className="table-workspace-btn revision-workspace-btn"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleWorkspaceClick(problem);
-                            }}
-                            title="Open Problem Overview"
-                          >
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
-                              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                              <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                            </svg>
-                          </button>
-                        </div>
-                        <span>{state.isComplete ? "Revision cycle complete" : state.subtitle}</span>
-                      </div>
-                      <span className="revision-priority-pill subtle">
-                        Revised
-                      </span>
-                      <div className="revision-item-actions">
-                        <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
-                          Open
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </section>
         ) : null}
 

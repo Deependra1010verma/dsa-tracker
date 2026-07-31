@@ -561,6 +561,187 @@ button {
   margin-bottom: 20px;
 }
 
+.revision-dashboard {
+  display: grid;
+  gap: 16px;
+  background:
+    linear-gradient(145deg, rgba(8, 13, 28, 0.96), rgba(5, 8, 19, 0.98));
+}
+
+.revision-dashboard-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.revision-dashboard-head h3 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  line-height: 1.1;
+}
+
+.revision-head-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.revision-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.revision-metric-card {
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(191, 219, 254, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.revision-metric-card.urgent {
+  border-color: rgba(248, 113, 113, 0.28);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.revision-metric-card.done {
+  border-color: rgba(34, 197, 94, 0.24);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.revision-metric-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.revision-metric-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.revision-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.revision-lane {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(191, 219, 254, 0.08);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.revision-lane.due-lane {
+  border-color: rgba(248, 113, 113, 0.14);
+  background: rgba(239, 68, 68, 0.035);
+}
+
+.revision-lane.revised-lane {
+  border-color: rgba(34, 197, 94, 0.14);
+  background: rgba(34, 197, 94, 0.035);
+}
+
+.revision-lane-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  min-height: 26px;
+}
+
+.revision-lane-head strong {
+  font-size: 0.94rem;
+}
+
+.revision-lane-kicker {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.revision-card {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(191, 219, 254, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.revision-card.due,
+.revision-card.overdue {
+  border-color: rgba(248, 113, 113, 0.24);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.revision-card.upcoming {
+  border-color: rgba(125, 211, 252, 0.16);
+}
+
+.revision-card.revised {
+  border-color: rgba(34, 197, 94, 0.2);
+  background: rgba(34, 197, 94, 0.07);
+}
+
+.revision-card-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.revision-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.revision-title-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.revision-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.revision-meta-row span {
+  min-width: 0;
+}
+
+.revision-card-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.revision-priority-pill.complete {
+  background: rgba(34, 197, 94, 0.12);
+  color: #bbf7d0;
+}
+
 .activity-panel {
   display: grid;
   grid-template-columns: minmax(280px, 0.92fr) minmax(0, 1.4fr);
@@ -2448,8 +2629,33 @@ textarea {
     white-space: normal;
   }
 
+  .revision-dashboard-head {
+    flex-direction: column;
+  }
+
+  .revision-head-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .revision-metrics,
+  .revision-board {
+    grid-template-columns: 1fr;
+  }
+
   .revision-grid {
     grid-template-columns: 1fr;
+  }
+
+  .revision-card {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .revision-card-actions {
+    grid-column: 2;
+    justify-items: start;
+    display: flex;
+    flex-wrap: wrap;
   }
 
   .revision-item,
@@ -5518,5 +5724,3 @@ a.problem-title-text {
     grid-template-columns: 1fr;
   }
 }
-
-
