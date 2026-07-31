@@ -167,62 +167,62 @@ const roadmapForTopic = (
     roadmapSectionOrder,
   }));
 
-const arrayRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-array", "Array", 1, entries);
+const arrayRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-array", roadmapSection, roadmapSectionOrder, entries);
 
-const sortingRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-sorting", "Sorting", 2, entries);
+const sortingRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-sorting", roadmapSection, roadmapSectionOrder, entries);
 
-const binarySearchRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-binary-search", "Binary Search", 3, entries);
+const binarySearchRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-binary-search", roadmapSection, roadmapSectionOrder, entries);
 
-const twoPointersRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-two-pointers", "Two Pointers", 4, entries);
+const twoPointersRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-two-pointers", roadmapSection, roadmapSectionOrder, entries);
 
-const matrixRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-matrix", "Matrix", 5, entries);
+const matrixRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-matrix", roadmapSection, roadmapSectionOrder, entries);
 
-const stringsRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-strings", "Strings", 6, entries);
+const stringsRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-strings", roadmapSection, roadmapSectionOrder, entries);
 
-const recursionRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-recursion", "Recursion", 7, entries);
+const recursionRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-recursion", roadmapSection, roadmapSectionOrder, entries);
 
-const linkedListRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-linked-list", "Linked List", 8, entries);
+const linkedListRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-linked-list", roadmapSection, roadmapSectionOrder, entries);
 
-const stackRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-stack", "Stack", 9, entries);
+const stackRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-stack", roadmapSection, roadmapSectionOrder, entries);
 
-const queueRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-queue", "Queue", 10, entries);
+const queueRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-queue", roadmapSection, roadmapSectionOrder, entries);
 
-const treeRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-tree", "Tree", 11, entries);
+const treeRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-tree", roadmapSection, roadmapSectionOrder, entries);
 
-const bstRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-bst", "BST", 12, entries);
+const bstRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-bst", roadmapSection, roadmapSectionOrder, entries);
 
-const heapRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-heap", "Heap", 13, entries);
+const heapRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-heap", roadmapSection, roadmapSectionOrder, entries);
 
-const hashingRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-hashing", "Hashing", 14, entries);
+const hashingRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-hashing", roadmapSection, roadmapSectionOrder, entries);
 
-const graphsRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-graphs", "Graphs", 15, entries);
+const graphsRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-graphs", roadmapSection, roadmapSectionOrder, entries);
 
-const dynamicProgrammingRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-dynamic-programming", "Dynamic Programming", 16, entries);
+const dynamicProgrammingRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-dynamic-programming", roadmapSection, roadmapSectionOrder, entries);
 
-const trieRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-trie", "Trie", 17, entries);
+const trieRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-trie", roadmapSection, roadmapSectionOrder, entries);
 
-const segmentTreeRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set3-segment-tree", "Segment Tree", 18, entries);
+const segmentTreeRoadmap = (roadmapSection: string, roadmapSectionOrder: number, entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
+  roadmapForTopic("set3-segment-tree", roadmapSection, roadmapSectionOrder, entries);
 
 export const problemSeeds3: ProblemSeed[] = [
-  ...arrayRoadmap([
+  ...arrayRoadmap("Array Basics & Transformation", 1, [
     {
       roadmapOrder: 1,
       title: "Reverse an Array",
@@ -299,7 +299,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...sortingRoadmap([
+  ...sortingRoadmap("Sorting Algorithms & Applications", 1, [
     {
       roadmapOrder: 1,
       title: "Selection Sort",
@@ -376,7 +376,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...binarySearchRoadmap([
+  ...binarySearchRoadmap("Binary Search Basics & Bound Search", 1, [
     {
       roadmapOrder: 1,
       title: "Find First and Last Position of Element in Sorted Array",
@@ -437,6 +437,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...binarySearchRoadmap("Binary Search on Answers & Rotated Arrays", 2, [
     {
       roadmapOrder: 5,
       title: "Search in Rotated Sorted Array",
@@ -498,7 +500,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...twoPointersRoadmap([
+  ...twoPointersRoadmap("Two Pointer Applications", 1, [
     {
       roadmapOrder: 1,
       title: "Remove Duplicates from Sorted Array",
@@ -547,7 +549,7 @@ export const problemSeeds3: ProblemSeed[] = [
     {
       roadmapOrder: 4,
       title: "Container With Most Water",
-      platformName: "GeeksforGeeks",
+      platformName: "LeetCode",
       platformUrl: gfg("container-with-most-water"),
       difficulty: "Medium",
       status: "unsolved",
@@ -560,7 +562,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...matrixRoadmap([
+  ...matrixRoadmap("Basic Matrix Operations & Search", 1, [
     {
       roadmapOrder: 1,
       title: "Search a 2D Matrix",
@@ -621,6 +623,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...matrixRoadmap("Matrix Manipulations & Traversals", 2, [
     {
       roadmapOrder: 5,
       title: "Rotate Image",
@@ -682,7 +686,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...stringsRoadmap([
+  ...stringsRoadmap("Basic String Manipulations & Sorting", 1, [
     {
       roadmapOrder: 1,
       title: "Sort Characters By Frequency",
@@ -743,6 +747,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...stringsRoadmap("String Math & Conversions", 2, [
     {
       roadmapOrder: 5,
       title: "Minimum Deletions",
@@ -803,6 +809,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...stringsRoadmap("Substrings & Matching Algorithms", 3, [
     {
       roadmapOrder: 9,
       title: "Longest Substring Without Repeating Characters",
@@ -879,7 +887,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...recursionRoadmap([
+  ...recursionRoadmap("Basic Recursion & Mathematical Series", 1, [
     {
       roadmapOrder: 1,
       title: "Print N to 1",
@@ -940,6 +948,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...recursionRoadmap("Divide & Conquer Algorithms", 2, [
     {
       roadmapOrder: 5,
       title: "Merge Sort",
@@ -985,6 +995,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...recursionRoadmap("Subsets & Backtracking", 3, [
     {
       roadmapOrder: 8,
       title: "Combination Sum",
@@ -1076,7 +1088,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...linkedListRoadmap([
+  ...linkedListRoadmap("Basic Operations & Modifications", 1, [
     {
       roadmapOrder: 1,
       title: "Convert Array to Linked List",
@@ -1137,6 +1149,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...linkedListRoadmap("Cycle Detection & Fast/Slow Pointers", 2, [
     {
       roadmapOrder: 5,
       title: "Linked List Cycle",
@@ -1257,6 +1271,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...linkedListRoadmap("Advanced Doubly & Random Pointer Lists", 3, [
     {
       roadmapOrder: 13,
       title: "Circular Doubly Linked List",
@@ -1318,7 +1334,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...stackRoadmap([
+  ...stackRoadmap("Stack Basics & Implementation", 1, [
     {
       roadmapOrder: 1,
       title: "Implement Stack",
@@ -1394,6 +1410,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...stackRoadmap("Monotonic Stack Patterns", 2, [
     {
       roadmapOrder: 6,
       title: "Min Stack",
@@ -1499,6 +1517,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...stackRoadmap("Histogram & Advanced Stack Problems", 3, [
     {
       roadmapOrder: 13,
       title: "Largest Rectangle in Histogram",
@@ -1545,7 +1565,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...queueRoadmap([
+  ...queueRoadmap("Queue Implementation & Manipulations", 1, [
     {
       roadmapOrder: 1,
       title: "Circular Queue",
@@ -1606,6 +1626,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...queueRoadmap("Advanced Queue & Circular Applications", 2, [
     {
       roadmapOrder: 5,
       title: "Stack using Queues",
@@ -1652,7 +1674,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...treeRoadmap([
+  ...treeRoadmap("Binary Tree Traversals & Structure", 1, [
     {
       roadmapOrder: 1,
       title: "Binary Tree Traversals",
@@ -1773,6 +1795,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...treeRoadmap("Tree Views & Path Sums", 2, [
     {
       roadmapOrder: 9,
       title: "Diameter of Binary Tree",
@@ -1878,6 +1902,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...treeRoadmap("Advanced Tree Construction & Traversals", 3, [
     {
       roadmapOrder: 16,
       title: "Preorder Traversal (Iterative)",
@@ -2029,7 +2055,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...bstRoadmap([
+  ...bstRoadmap("BST Search & Validation", 1, [
     {
       roadmapOrder: 1,
       title: "Search in BST",
@@ -2120,6 +2146,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...bstRoadmap("BST Traversals & Conversions", 2, [
     {
       roadmapOrder: 7,
       title: "Largest BST in Binary Tree",
@@ -2240,6 +2268,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...bstRoadmap("Advanced BST Problems & Fixes", 3, [
     {
       roadmapOrder: 15,
       title: "Recover Binary Search Tree",
@@ -2286,7 +2316,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...heapRoadmap([
+  ...heapRoadmap("Heap Fundamentals & Sorting", 1, [
     {
       roadmapOrder: 1,
       title: "Delete Node in BST",
@@ -2347,6 +2377,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...heapRoadmap("Priority Queue Applications & Top K", 2, [
     {
       roadmapOrder: 5,
       title: "Maximum Profit",
@@ -2437,6 +2469,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...heapRoadmap("Advanced Heap Patterns & Streaming", 3, [
     {
       roadmapOrder: 11,
       title: "Sort by Second Value",
@@ -2498,7 +2532,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...hashingRoadmap([
+  ...hashingRoadmap("Hash Map Fundamentals & Window Tracking", 1, [
     {
       roadmapOrder: 1,
       title: "Hash Map Basics",
@@ -2575,7 +2609,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...graphsRoadmap([
+  ...graphsRoadmap("Graph Traversals (BFS & DFS)", 1, [
     {
       roadmapOrder: 1,
       title: "BFS",
@@ -2666,6 +2700,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...graphsRoadmap("Cycle Detection & Topological Sort", 2, [
     {
       roadmapOrder: 7,
       title: "Detect Cycle in Undirected Graph",
@@ -2801,6 +2837,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...graphsRoadmap("Shortest Path & Minimum Spanning Tree", 3, [
     {
       roadmapOrder: 16,
       title: "Dijkstra's Algorithm",
@@ -2936,6 +2974,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...graphsRoadmap("Advanced Graph Algorithms & Articulation", 4, [
     {
       roadmapOrder: 25,
       title: "Cycle in Directed Graph",
@@ -3012,7 +3052,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...dynamicProgrammingRoadmap([
+  ...dynamicProgrammingRoadmap("Basic 1D Dynamic Programming", 1, [
     {
       roadmapOrder: 1,
       title: "Climbing Stairs",
@@ -3103,6 +3143,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...dynamicProgrammingRoadmap("2D Grid & Subsequence DP", 2, [
     {
       roadmapOrder: 7,
       title: "0/1 Knapsack",
@@ -3268,6 +3310,8 @@ export const problemSeeds3: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...dynamicProgrammingRoadmap("Advanced DP & Stock/Game Problems", 3, [
     {
       roadmapOrder: 18,
       title: "Subset Sum Problem",
@@ -3389,7 +3433,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...trieRoadmap([
+  ...trieRoadmap("Trie Implementation & Search", 1, [
     {
       roadmapOrder: 1,
       title: "Implement Trie",
@@ -3436,7 +3480,7 @@ export const problemSeeds3: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...segmentTreeRoadmap([
+  ...segmentTreeRoadmap("Segment Tree & Range Queries", 1, [
     {
       roadmapOrder: 1,
       title: "Range Sum Query",

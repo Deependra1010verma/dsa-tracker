@@ -127,47 +127,86 @@ const roadmapForTopic = (
     roadmapSectionOrder,
   }));
 
-const binarySearchRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-binary-search", "Binary Search Patterns", 1, entries);
+const binarySearchRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-binary-search", roadmapSection, roadmapSectionOrder, entries);
 
-const twoPointersRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-two-pointers", "Two Pointers Patterns", 2, entries);
+const twoPointersRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-two-pointers", roadmapSection, roadmapSectionOrder, entries);
 
-const twoDArrayRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-2d-array", "2D Array & Matrix", 3, entries);
+const twoDArrayRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-2d-array", roadmapSection, roadmapSectionOrder, entries);
 
-const stringsRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-strings", "String Manipulation & Matching", 4, entries);
+const stringsRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-strings", roadmapSection, roadmapSectionOrder, entries);
 
-const recursionRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-recursion", "Recursion & Backtracking", 5, entries);
+const recursionRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-recursion", roadmapSection, roadmapSectionOrder, entries);
 
-const linkedListRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-linked-list", "Linked List", 6, entries);
+const linkedListRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-linked-list", roadmapSection, roadmapSectionOrder, entries);
 
-const doublyLinkedListRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-doubly-linked-list", "Doubly Linked List", 7, entries);
+const doublyLinkedListRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-doubly-linked-list", roadmapSection, roadmapSectionOrder, entries);
 
-const circularLinkedListRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-circular-linked-list", "Circular Linked List", 8, entries);
+const circularLinkedListRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-circular-linked-list", roadmapSection, roadmapSectionOrder, entries);
 
-const stackRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-stack", "Stack", 9, entries);
+const stackRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-stack", roadmapSection, roadmapSectionOrder, entries);
 
-const queueRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-queue", "Queue", 10, entries);
+const queueRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-queue", roadmapSection, roadmapSectionOrder, entries);
 
-const treeRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-tree", "Tree", 11, entries);
+const treeRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-tree", roadmapSection, roadmapSectionOrder, entries);
 
-const bstRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-bst", "Binary Search Tree", 12, entries);
+const bstRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-bst", roadmapSection, roadmapSectionOrder, entries);
 
-const heapRoadmap = (entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>) => 
-  roadmapForTopic("set2-heap", "Heap", 13, entries);
+const heapRoadmap = (
+  roadmapSection: string,
+  roadmapSectionOrder: number,
+  entries: Array<Omit<ProblemSeed, "topicSlug"> & { roadmapOrder: number; }>
+) => roadmapForTopic("set2-heap", roadmapSection, roadmapSectionOrder, entries);
 
 export const problemSeeds2: ProblemSeed[] = [
-  ...binarySearchRoadmap([
+  ...binarySearchRoadmap("Searching on Sorted Arrays", 1, [
     {
       roadmapOrder: 1,
       title: "Find First and Last Position of Element in Sorted Array (Left Most & Right Most)",
@@ -243,6 +282,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 10,
       isPinned: true,
     },
+  ]),
+  ...binarySearchRoadmap("Binary Search on Answer Space", 2, [
     {
       roadmapOrder: 6,
       title: "Find Nth Root Of M",
@@ -319,7 +360,7 @@ export const problemSeeds2: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...twoPointersRoadmap([
+  ...twoPointersRoadmap("Two Pointers Basics & Segregation", 1, [
     {
       roadmapOrder: 1,
       title: "Segregate 0s and 1s",
@@ -365,6 +406,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 8,
       isPinned: false,
     },
+  ]),
+  ...twoPointersRoadmap("Prefix Sum & Subarrays", 2, [
     {
       roadmapOrder: 4,
       title: "Prefix and Suffix Sum (Equilibrium Point)",
@@ -395,6 +438,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 10,
       isPinned: true,
     },
+  ]),
+  ...twoPointersRoadmap("Advanced Two Pointers", 3, [
     {
       roadmapOrder: 6,
       title: "Trapping Rain Water",
@@ -426,7 +471,7 @@ export const problemSeeds2: ProblemSeed[] = [
       isPinned: true,
     },
   ]),
-  ...twoDArrayRoadmap([
+  ...twoDArrayRoadmap("Basic Matrix & Traversals", 1, [
     {
       roadmapOrder: 1,
       title: "Search a 2D Matrix",
@@ -517,6 +562,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 7,
       isPinned: false,
     },
+  ]),
+  ...twoDArrayRoadmap("Matrix Transformation & Spiral", 2, [
     {
       roadmapOrder: 7,
       title: "Spiral Matrix",
@@ -577,6 +624,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 8,
       isPinned: false,
     },
+  ]),
+  ...twoDArrayRoadmap("Advanced Matrix Search & Logic", 3, [
     {
       roadmapOrder: 11,
       title: "Search a 2D Matrix II",
@@ -653,7 +702,7 @@ export const problemSeeds2: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...stringsRoadmap([
+  ...stringsRoadmap("Basic String Manipulation & Sorting", 1, [
     {
       roadmapOrder: 1,
       title: "Defanging an IP Address",
@@ -759,6 +808,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 8,
       isPinned: false,
     },
+  ]),
+  ...stringsRoadmap("String Math & Conversions", 2, [
     {
       roadmapOrder: 8,
       title: "Add Strings",
@@ -804,6 +855,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 9,
       isPinned: false,
     },
+  ]),
+  ...stringsRoadmap("Substrings & Matching", 3, [
     {
       roadmapOrder: 11,
       title: "Longest Substring Without Repeating Characters",
@@ -895,7 +948,7 @@ export const problemSeeds2: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...recursionRoadmap([
+  ...recursionRoadmap("Basic Recursion & Math", 1, [
     {
       roadmapOrder: 1,
       title: "Print 1 To N Without Loop",
@@ -1031,6 +1084,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 7,
       isPinned: false,
     },
+  ]),
+  ...recursionRoadmap("Recursion on Arrays & Strings", 2, [
     {
       roadmapOrder: 10,
       title: "Sum of Array",
@@ -1136,6 +1191,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 4,
       isPinned: false,
     },
+  ]),
+  ...recursionRoadmap("Divide and Conquer", 3, [
     {
       roadmapOrder: 17,
       title: "Binary Search (Recursive)",
@@ -1181,6 +1238,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 10,
       isPinned: true,
     },
+  ]),
+  ...recursionRoadmap("Subsets & Combinations", 4, [
     {
       roadmapOrder: 20,
       title: "Subsets (Subsequences)",
@@ -1271,6 +1330,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 10,
       isPinned: true,
     },
+  ]),
+  ...recursionRoadmap("Permutations & Backtracking", 5, [
     {
       roadmapOrder: 26,
       title: "Permutations",
@@ -1392,7 +1453,7 @@ export const problemSeeds2: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...linkedListRoadmap([
+  ...linkedListRoadmap("Basic Operations & Traversal", 1, [
     {
       roadmapOrder: 1,
       title: "Introduction to Linked List",
@@ -1468,6 +1529,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 5,
       isPinned: false,
     },
+  ]),
+  ...linkedListRoadmap("Two Pointers & Manipulation", 2, [
     {
       roadmapOrder: 6,
       title: "Merge Two Sorted Lists",
@@ -1529,7 +1592,7 @@ export const problemSeeds2: ProblemSeed[] = [
       isPinned: false,
     },
   ]),
-  ...doublyLinkedListRoadmap([
+  ...doublyLinkedListRoadmap("DLL Basics & Operations", 1, [
     {
       roadmapOrder: 1,
       title: "Introduction to Doubly Linked List",
@@ -1590,6 +1653,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 7,
       isPinned: true,
     },
+  ]),
+  ...doublyLinkedListRoadmap("DLL Two Pointers & Design", 2, [
     {
       roadmapOrder: 5,
       title: "Find pairs with given sum in doubly linked list",
@@ -1651,7 +1716,7 @@ export const problemSeeds2: ProblemSeed[] = [
       isPinned: true,
     },
   ]),
-  ...circularLinkedListRoadmap([
+  ...circularLinkedListRoadmap("CLL Basics & Traversal", 1, [
     {
       roadmapOrder: 1,
       title: "Introduction to Circular Linked List",
@@ -1712,6 +1777,8 @@ export const problemSeeds2: ProblemSeed[] = [
       priority: 4,
       isPinned: false,
     },
+  ]),
+  ...circularLinkedListRoadmap("CLL Manipulations & Applications", 2, [
     {
       roadmapOrder: 5,
       title: "Split a Circular Linked List into two halves",
@@ -1803,7 +1870,7 @@ export const problemSeeds2: ProblemSeed[] = [
       isPinned: true,
     },
   ]),
-  ...stackRoadmap([
+  ...stackRoadmap("Stack Basics & Parentheses", 1, [
     { roadmapOrder: 1, title: "Implement Stack using Arrays", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/implement-stack-using-array/1", difficulty: "Easy", status: "unsolved", tags: ["stack"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 2, title: "Implement Stack using Queues", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/implement-stack-using-queues/", difficulty: "Easy", status: "unsolved", tags: ["stack"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 3, title: "Valid Parentheses", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/valid-parentheses/", difficulty: "Easy", status: "unsolved", tags: ["stack"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
@@ -1811,6 +1878,8 @@ export const problemSeeds2: ProblemSeed[] = [
     { roadmapOrder: 5, title: "Minimum Add to Make Parentheses Valid", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/minimum-add-to-make-parentheses-valid/", difficulty: "Medium", status: "unsolved", tags: ["stack"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 6, title: "Remove Invalid Parentheses", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/remove-invalid-parentheses/", difficulty: "Hard", status: "unsolved", tags: ["stack"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 7, title: "Backspace String Compare", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/backspace-string-compare/", difficulty: "Easy", status: "unsolved", tags: ["stack"], priority: 6, isPinned: false, shortNote: "", longNote: "" },
+  ]),
+  ...stackRoadmap("Monotonic Stack Patterns", 2, [
     { roadmapOrder: 8, title: "The Celebrity Problem", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/the-celebrity-problem/1", difficulty: "Medium", status: "unsolved", tags: ["stack"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 9, title: "Next Greater Element", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/next-larger-element-1587115620/1", difficulty: "Medium", status: "unsolved", tags: ["stack"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 10, title: "Smallest number on left", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/smallest-number-on-left3403/1", difficulty: "Medium", status: "unsolved", tags: ["stack"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
@@ -1819,11 +1888,13 @@ export const problemSeeds2: ProblemSeed[] = [
     { roadmapOrder: 13, title: "Largest Rectangle in Histogram", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/largest-rectangle-in-histogram/", difficulty: "Hard", status: "unsolved", tags: ["stack"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 14, title: "Maximal Rectangle", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/maximal-rectangle/", difficulty: "Hard", status: "unsolved", tags: ["stack"], priority: 10, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 15, title: "Get minimum element from stack", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/get-minimum-element-from-stack/1", difficulty: "Medium", status: "unsolved", tags: ["stack"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
+  ]),
+  ...stackRoadmap("Advanced Stack Implementations", 3, [
     { roadmapOrder: 16, title: "Max rectangle", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/max-rectangle/1", difficulty: "Hard", status: "unsolved", tags: ["stack"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 17, title: "Implement two stacks in an array", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/implement-two-stacks-in-an-array/1", difficulty: "Easy", status: "unsolved", tags: ["stack"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 18, title: "N Stack In An Array", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/n-stack-in-an-array/1", difficulty: "Hard", status: "unsolved", tags: ["stack"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
   ]),
-  ...queueRoadmap([
+  ...queueRoadmap("Queue Fundamentals & Conversion", 1, [
     { roadmapOrder: 1, title: "Implement Queue using Linked List", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/implement-queue-using-linked-list/1", difficulty: "Easy", status: "unsolved", tags: ["queue"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 2, title: "Print Queue", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/print-queue/1", difficulty: "Easy", status: "unsolved", tags: ["queue"], priority: 4, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 3, title: "Queue Reversal", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/queue-reversal/1", difficulty: "Easy", status: "unsolved", tags: ["queue"], priority: 6, isPinned: false, shortNote: "", longNote: "" },
@@ -1832,7 +1903,7 @@ export const problemSeeds2: ProblemSeed[] = [
     { roadmapOrder: 6, title: "Implement Queue using Stacks", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/implement-queue-using-stacks/", difficulty: "Easy", status: "unsolved", tags: ["queue"], priority: 8, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 7, title: "Implement Stack using Queues", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/implement-stack-using-queues/", difficulty: "Easy", status: "unsolved", tags: ["queue"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
   ]),
-  ...treeRoadmap([
+  ...treeRoadmap("Tree Traversals & Basic Properties", 1, [
     { roadmapOrder: 1, title: "Tree Traversals", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/tree-traversals/1", difficulty: "Easy", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 2, title: "Level order traversal", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/level-order-traversal/1", difficulty: "Easy", status: "unsolved", tags: ["tree"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 3, title: "Size of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/size-of-binary-tree/1", difficulty: "Easy", status: "unsolved", tags: ["tree"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
@@ -1846,47 +1917,57 @@ export const problemSeeds2: ProblemSeed[] = [
     { roadmapOrder: 11, title: "Check for Balanced Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/check-for-balanced-tree/1", difficulty: "Easy", status: "unsolved", tags: ["tree"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 12, title: "Level order traversal in spiral form", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/level-order-traversal-in-spiral-form/1", difficulty: "Easy", status: "unsolved", tags: ["tree"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 13, title: "Cousins in Binary Tree", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/cousins-in-binary-tree/", difficulty: "Easy", status: "unsolved", tags: ["tree"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
-        { roadmapOrder: 14, title: "Left View of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/left-view-of-binary-tree/1", difficulty: "Easy", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
+  ]),
+  ...treeRoadmap("Tree Views & Construction", 2, [
+    { roadmapOrder: 14, title: "Left View of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/left-view-of-binary-tree/1", difficulty: "Easy", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 15, title: "Right View of Binary Tree", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/binary-tree-right-side-view/", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 16, title: "Top View of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/top-view-of-binary-tree/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 17, title: "Bottom View of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/bottom-view-of-binary-tree/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
-    { roadmapOrder: 15, title: "Construct Tree from Preorder and Inorder", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/construct-tree-1/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
-    { roadmapOrder: 16, title: "Construct Tree from Postorder and Inorder", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/tree-from-postorder-and-inorder/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 9, isPinned: false, shortNote: "", longNote: "" },
-    { roadmapOrder: 17, title: "Vertical Traversal of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/print-a-binary-tree-in-vertical-order/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
-    { roadmapOrder: 18, title: "Diagonal Traversal of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/diagonal-traversal-of-binary-tree/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
-    { roadmapOrder: 19, title: "Boundary Traversal of binary tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/boundary-traversal-of-binary-tree/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
-    { roadmapOrder: 20, title: "Morris Traversal", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/inorder-traversal-without-recursion-and-without-stack/1", difficulty: "Hard", status: "unsolved", tags: ["tree"], priority: 9, isPinned: false, shortNote: "", longNote: "" },
-    { roadmapOrder: 21, title: "Flatten binary tree to linked list", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/flatten-binary-tree-to-linked-list/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
-    { roadmapOrder: 22, title: "Burning Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/burning-tree/1", difficulty: "Hard", status: "unsolved", tags: ["tree"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
-    { roadmapOrder: 23, title: "Maximum path sum from any node", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/maximum-path-sum-from-any-node/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
+    { roadmapOrder: 18, title: "Construct Tree from Preorder and Inorder", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/construct-tree-1/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
+    { roadmapOrder: 19, title: "Construct Tree from Postorder and Inorder", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/tree-from-postorder-and-inorder/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 9, isPinned: false, shortNote: "", longNote: "" },
+    { roadmapOrder: 20, title: "Vertical Traversal of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/print-a-binary-tree-in-vertical-order/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
+    { roadmapOrder: 21, title: "Diagonal Traversal of Binary Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/diagonal-traversal-of-binary-tree/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
+    { roadmapOrder: 22, title: "Boundary Traversal of binary tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/boundary-traversal-of-binary-tree/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
   ]),
-  ...bstRoadmap([
+  ...treeRoadmap("Advanced Tree Traversals & Algorithms", 3, [
+    { roadmapOrder: 23, title: "Morris Traversal", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/inorder-traversal-without-recursion-and-without-stack/1", difficulty: "Hard", status: "unsolved", tags: ["tree"], priority: 9, isPinned: false, shortNote: "", longNote: "" },
+    { roadmapOrder: 24, title: "Flatten binary tree to linked list", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/flatten-binary-tree-to-linked-list/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
+    { roadmapOrder: 25, title: "Burning Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/burning-tree/1", difficulty: "Hard", status: "unsolved", tags: ["tree"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
+    { roadmapOrder: 26, title: "Maximum path sum from any node", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/maximum-path-sum-from-any-node/1", difficulty: "Medium", status: "unsolved", tags: ["tree"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
+  ]),
+  ...bstRoadmap("BST Operations & Searching", 1, [
     { roadmapOrder: 1, title: "Binary Search Tree", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/binary-search-trees/1", difficulty: "Easy", status: "unsolved", tags: ["bst"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 2, title: "Check for BST", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/check-for-bst/1", difficulty: "Easy", status: "unsolved", tags: ["bst"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 3, title: "Minimum element in BST", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/minimum-element-in-bst/1", difficulty: "Easy", status: "unsolved", tags: ["bst"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 4, title: "K-th Smallest Element in BST", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/kth-smallest-element-in-a-bst/", difficulty: "Medium", status: "unsolved", tags: ["bst"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 5, title: "Kth largest element in BST", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/kth-largest-element-in-bst/1", difficulty: "Easy", status: "unsolved", tags: ["bst"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 6, title: "Array to BST", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/array-to-bst4443/1", difficulty: "Easy", status: "unsolved", tags: ["bst"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
+  ]),
+  ...bstRoadmap("BST Construction & Ancestors", 2, [
     { roadmapOrder: 7, title: "Construct BST from Preorder Traversal", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/construct-binary-search-tree-from-preorder-traversal/", difficulty: "Medium", status: "unsolved", tags: ["bst"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 8, title: "Preorder Traversal and BST", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/preorder-traversal-and-bst4006/1", difficulty: "Medium", status: "unsolved", tags: ["bst"], priority: 8, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 9, title: "Lowest Common Ancestor in a BST", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/lowest-common-ancestor-in-a-bst/1", difficulty: "Easy", status: "unsolved", tags: ["bst"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 10, title: "Print BST elements in given range", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/print-bst-elements-in-given-range/1", difficulty: "Easy", status: "unsolved", tags: ["bst"], priority: 6, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 11, title: "Common Nodes in two BSTs", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/common-nodes-in-bst/1", difficulty: "Easy", status: "unsolved", tags: ["bst"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 12, title: "Convert Sorted List to Binary Search Tree", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/convert-sorted-list-to-binary-search-tree/", difficulty: "Medium", status: "unsolved", tags: ["bst", "linked-list"], priority: 8, isPinned: true, shortNote: "", longNote: "" },
+  ]),
+  ...bstRoadmap("Advanced BST Manipulations", 3, [
     { roadmapOrder: 13, title: "Merge two BST 's", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/merge-two-bst-s/1", difficulty: "Hard", status: "unsolved", tags: ["bst"], priority: 9, isPinned: false, shortNote: "", longNote: "" },
     { roadmapOrder: 14, title: "Recover Binary Search Tree", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/recover-binary-search-tree/", difficulty: "Medium", status: "unsolved", tags: ["bst"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 15, title: "Largest BST", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/largest-bst/1", difficulty: "Hard", status: "unsolved", tags: ["bst"], priority: 10, isPinned: true, shortNote: "", longNote: "" },
   ]),
-  ...heapRoadmap([
-        { roadmapOrder: 1, title: "Build Heap", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/building-heap/1", difficulty: "Medium", status: "unsolved", tags: ["heap"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
+  ...heapRoadmap("Heap Operations & Sorting", 1, [
+    { roadmapOrder: 1, title: "Build Heap", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/building-heap/1", difficulty: "Medium", status: "unsolved", tags: ["heap"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
     { roadmapOrder: 2, title: "Heap Sort", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/sort-an-array/", difficulty: "Medium", status: "unsolved", tags: ["heap"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
-    { roadmapOrder: 2, title: "Height of Heap", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/height-of-heap/1", difficulty: "Easy", status: "unsolved", tags: ["heap"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
-    { roadmapOrder: 3, title: "Minimum Cost of ropes", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/minimum-cost-of-ropes-1587115620/1", difficulty: "Easy", status: "unsolved", tags: ["heap", "greedy"], priority: 8, isPinned: true, shortNote: "", longNote: "" },
-    { roadmapOrder: 4, title: "Magician and Chocolates", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/magician-and-chocolates/1", difficulty: "Easy", status: "unsolved", tags: ["heap"], priority: 6, isPinned: false, shortNote: "", longNote: "" },
-    { roadmapOrder: 5, title: "Last Stone Weight", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/last-stone-weight/", difficulty: "Easy", status: "unsolved", tags: ["heap"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
-    { roadmapOrder: 6, title: "Take Gifts From the Richest Pile", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/take-gifts-from-the-richest-pile/", difficulty: "Easy", status: "unsolved", tags: ["heap"], priority: 6, isPinned: false, shortNote: "", longNote: "" },
-    { roadmapOrder: 7, title: "IPO", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/ipo/", difficulty: "Hard", status: "unsolved", tags: ["heap", "greedy"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
-    { roadmapOrder: 8, title: "Kth Smallest Element in a Sorted Matrix", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/", difficulty: "Medium", status: "unsolved", tags: ["heap", "binary-search"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
+    { roadmapOrder: 3, title: "Height of Heap", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/height-of-heap/1", difficulty: "Easy", status: "unsolved", tags: ["heap"], priority: 5, isPinned: false, shortNote: "", longNote: "" },
+  ]),
+  ...heapRoadmap("Priority Queue Applications", 2, [
+    { roadmapOrder: 4, title: "Minimum Cost of ropes", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/minimum-cost-of-ropes-1587115620/1", difficulty: "Easy", status: "unsolved", tags: ["heap", "greedy"], priority: 8, isPinned: true, shortNote: "", longNote: "" },
+    { roadmapOrder: 5, title: "Magician and Chocolates", platformName: "GeeksforGeeks", platformUrl: "https://www.geeksforgeeks.org/problems/magician-and-chocolates/1", difficulty: "Easy", status: "unsolved", tags: ["heap"], priority: 6, isPinned: false, shortNote: "", longNote: "" },
+    { roadmapOrder: 6, title: "Last Stone Weight", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/last-stone-weight/", difficulty: "Easy", status: "unsolved", tags: ["heap"], priority: 7, isPinned: false, shortNote: "", longNote: "" },
+    { roadmapOrder: 7, title: "Take Gifts From the Richest Pile", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/take-gifts-from-the-richest-pile/", difficulty: "Easy", status: "unsolved", tags: ["heap"], priority: 6, isPinned: false, shortNote: "", longNote: "" },
+    { roadmapOrder: 8, title: "IPO", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/ipo/", difficulty: "Hard", status: "unsolved", tags: ["heap", "greedy"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
+    { roadmapOrder: 9, title: "Kth Smallest Element in a Sorted Matrix", platformName: "LeetCode", platformUrl: "https://leetcode.com/problems/kth-smallest-element-in-a-sorted-matrix/", difficulty: "Medium", status: "unsolved", tags: ["heap", "binary-search"], priority: 9, isPinned: true, shortNote: "", longNote: "" },
   ]),
 ];
 
