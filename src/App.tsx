@@ -232,6 +232,18 @@ type ActivityRecord = {
   };
 };
 
+type ActivityProblemSnapshot = {
+  _id: string;
+  title: string;
+  difficulty: Difficulty;
+  platformName: string;
+};
+
+type ActivityTopicSnapshot = {
+  _id: string;
+  name: string;
+};
+
 type ActivityEntry = {
   problemId: string;
   problemTitle: string;
@@ -1547,6 +1559,7 @@ export default function App() {
   const [workspaceSaveState, setWorkspaceSaveState] = useState<WorkspaceSaveState>("idle");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [completingRevisionIds, setCompletingRevisionIds] = useState<Set<string>>(() => new Set());
+  const [hiddenRevisionIds, setHiddenRevisionIds] = useState<Set<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
   const [isFocusMode, setIsFocusMode] = useState<boolean>(() => {
@@ -1724,6 +1737,27 @@ export default function App() {
   const removeProblem = useCallback((problemId: string) => {
     setProblems((current) => current.filter((problem) => problem._id !== problemId));
   }, []);
+
+  const appendActivityRecord = useCallback(
+    (
+      kind: ActivityKind,
+      problem: ActivityProblemSnapshot,
+      topic: ActivityTopicSnapshot,
+      occurredAt = new Date()
+    ) => {
+      setActivities((current) => {
+        const nextActivity: ActivityRecord = {
+          _id: `local-${problem._id}-${kind}-${occurredAt.getTime()}`,
+          kind,
+          occurredAt: occurredAt.toISOString(),
+          problem,
+          topic,
+        };
+        return [nextActivity, ...current];
+      });
+    },
+    []
+  );
 
   const openProblemLink = useCallback((problem: Problem) => {
     window.open(problem.platformUrl, "_blank", "noopener,noreferrer");
@@ -2082,9 +2116,9 @@ export default function App() {
   const revisionProblems = useMemo(
     () => problems.filter((problem) => {
       const state = revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate);
-      return state.isScheduled && !state.isComplete;
+      return state.isScheduled && !state.isComplete && !hiddenRevisionIds.has(problem._id);
     }),
-    [nowDate, problems, revisionStateMap]
+    [hiddenRevisionIds, nowDate, problems, revisionStateMap]
   );
 
   const dueRevisionProblems = useMemo(() => {
@@ -2122,6 +2156,17 @@ export default function App() {
       })
       .slice(0, 8);
   }, [nowDate, revisionProblems, revisionStateMap]);
+
+  const revisedSessionProblems = useMemo(() => {
+    return problems
+      .filter((problem) => hiddenRevisionIds.has(problem._id))
+      .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
+      .sort((left, right) => {
+        const leftTime = toValidDate(left.problem.lastRevisionAt)?.getTime() ?? 0;
+        const rightTime = toValidDate(right.problem.lastRevisionAt)?.getTime() ?? 0;
+        return rightTime - leftTime;
+      });
+  }, [hiddenRevisionIds, nowDate, problems, revisionStateMap]);
 
   const toggleTopicExpanded = useCallback((topicId: string) => {
     setExpandedTopics((prev) => {
@@ -2185,6 +2230,8 @@ export default function App() {
   }, []);
 
   const openStudyView = useCallback((problem: Problem) => {
+    setPreviewNoteProblem(null);
+    setDrawerOpen(false);
     setActiveProblem(problem);
     syncFormFromProblem(problem);
     void hydrateProblemDetails(problem).then((nextProblem) => {
@@ -2207,6 +2254,10 @@ export default function App() {
       openStudyView(problem);
     }
   }, [hydrateProblemDetails, openStudyView]);
+
+  const startRevisionPractice = useCallback((problem: Problem) => {
+    openProblemLink(problem);
+  }, [openProblemLink]);
 
   const openEditDrawer = useCallback((problem: Problem) => {
     setActiveProblem(problem);
@@ -2462,25 +2513,39 @@ export default function App() {
       upsertProblem(response.problem);
       if (activeProblem?._id === problem._id) {
         setActiveProblem(response.problem);
+        syncFormFromProblem(response.problem);
       }
-      void loadData({ silent: true });
+      if (problem.status !== "solved" && nextStatus === "solved") {
+        appendActivityRecord("solved", response.problem, response.problem.topic);
+      } else if (problem.status !== "revisit" && nextStatus === "revisit") {
+        appendActivityRecord("revisit", response.problem, response.problem.topic);
+      }
+      setNow(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update status");
     }
-  }, [activeProblem, setError, setActiveProblem, upsertProblem]);
+  }, [activeProblem, appendActivityRecord, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
 
   const completeRevision = useCallback(async (problem: Problem) => {
     try {
       setCompletingRevisionIds((prev) => new Set(prev).add(problem._id));
+      setHiddenRevisionIds((prev) => new Set(prev).add(problem._id));
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/revision`, {
         method: "POST",
       });
       upsertProblem(response.problem);
       if (activeProblem?._id === problem._id) {
         setActiveProblem(response.problem);
+        syncFormFromProblem(response.problem);
       }
-      void loadData({ silent: true });
+      appendActivityRecord("revision", response.problem, response.problem.topic, new Date(response.problem.lastRevisionAt ?? Date.now()));
+      setNow(Date.now());
     } catch (err) {
+      setHiddenRevisionIds((prev) => {
+        const next = new Set(prev);
+        next.delete(problem._id);
+        return next;
+      });
       setError(err instanceof Error ? err.message : "Could not update revision schedule");
     } finally {
       setCompletingRevisionIds((prev) => {
@@ -2489,7 +2554,7 @@ export default function App() {
         return next;
       });
     }
-  }, [activeProblem, setError, setActiveProblem, upsertProblem]);
+  }, [activeProblem, appendActivityRecord, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
 
   const deleteProblem = useCallback(async (problemId: string) => {
     try {
@@ -2522,10 +2587,14 @@ export default function App() {
         body: JSON.stringify({ isPinned: nextPinned }),
       });
       upsertProblem(response.problem);
+      if (activeProblem?._id === problem._id) {
+        setActiveProblem(response.problem);
+        syncFormFromProblem(response.problem);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not toggle pin");
     }
-  }, [setError, upsertProblem]);
+  }, [activeProblem, setError, syncFormFromProblem, upsertProblem]);
 
   const progress = stats && stats.totalProblems > 0 ? Math.round((stats.solvedProblems / stats.totalProblems) * 100) : 0;
   const visibleProgress =
@@ -2898,28 +2967,30 @@ export default function App() {
                             {isChecked ? "✓" : ""}
                           </button>
                           <div className="revision-item-copy">
-                            <strong>{problem.title}</strong>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <strong>{problem.title}</strong>
+                              <button
+                                type="button"
+                                className="table-workspace-btn revision-workspace-btn"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleWorkspaceClick(problem);
+                                }}
+                                title="Open Problem Workspace"
+                              >
+                                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
+                                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                  <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                                </svg>
+                              </button>
+                            </div>
                             <span>{state.subtitle}</span>
                           </div>
                           <span className="revision-priority-pill">
                             {getRevisionQueueMeta(problem, state).label}
                           </span>
                           <div className="revision-item-actions">
-                            <button
-                              type="button"
-                              className="table-workspace-btn revision-workspace-btn"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleWorkspaceClick(problem);
-                              }}
-                              title="Open Problem Workspace"
-                            >
-                              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
-                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                                <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                              </svg>
-                            </button>
-                            <button className="revision-action" onClick={() => openProblemLink(problem)}>
+                            <button className="revision-action" onClick={() => startRevisionPractice(problem)}>
                               Revise
                             </button>
                           </div>
@@ -2938,29 +3009,43 @@ export default function App() {
                   {sidebarRevisionProblems.length > 0 ? (
                     sidebarRevisionProblems.map(({ problem, state }) => (
                       <article key={problem._id} className="revision-item upcoming">
+                        <button
+                          className={`revision-check ${completingRevisionIds.has(problem._id) ? "checked" : ""}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void completeRevision(problem);
+                          }}
+                          aria-label="Mark revision complete"
+                          title="Mark done"
+                          disabled={completingRevisionIds.has(problem._id)}
+                        >
+                          {completingRevisionIds.has(problem._id) ? "✓" : ""}
+                        </button>
                         <div className="revision-item-copy">
-                          <strong>{problem.title}</strong>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <strong>{problem.title}</strong>
+                            <button
+                              type="button"
+                              className="table-workspace-btn revision-workspace-btn"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleWorkspaceClick(problem);
+                              }}
+                              title="Open Problem Workspace"
+                            >
+                              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
+                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                              </svg>
+                            </button>
+                          </div>
                           <span>{state.subtitle}</span>
                         </div>
                         <span className="revision-priority-pill subtle">
                           {getRevisionQueueMeta(problem, state).label}
                         </span>
                         <div className="revision-item-actions">
-                          <button
-                            type="button"
-                            className="table-workspace-btn revision-workspace-btn"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleWorkspaceClick(problem);
-                            }}
-                            title="Open Problem Workspace"
-                          >
-                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
-                              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                              <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                            </svg>
-                          </button>
-                          <button className="revision-action ghost" onClick={() => handleWorkspaceClick(problem)}>
+                          <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
                             Open
                           </button>
                         </div>
@@ -2977,7 +3062,51 @@ export default function App() {
               <span>{revisionProblems.length} items in revisit queue</span>
               <span>{dueRevisionProblems.length} due now</span>
               <span>{sidebarRevisionProblems.length} upcoming</span>
+              <span>{revisedSessionProblems.length} revised</span>
             </div>
+
+            {revisedSessionProblems.length > 0 ? (
+              <div className="revision-stack revised-stack">
+                <p className="revision-stack-label">Revised in this session</p>
+                <div className="revision-list">
+                  {revisedSessionProblems.map(({ problem, state }) => (
+                    <article key={problem._id} className="revision-item upcoming">
+                      <button className="revision-check checked" disabled aria-label="Revision completed">
+                        ✓
+                      </button>
+                      <div className="revision-item-copy">
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <strong>{problem.title}</strong>
+                          <button
+                            type="button"
+                            className="table-workspace-btn revision-workspace-btn"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleWorkspaceClick(problem);
+                            }}
+                            title="Open Problem Overview"
+                          >
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
+                              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                              <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                            </svg>
+                          </button>
+                        </div>
+                        <span>{state.isComplete ? "Revision cycle complete" : state.subtitle}</span>
+                      </div>
+                      <span className="revision-priority-pill subtle">
+                        Revised
+                      </span>
+                      <div className="revision-item-actions">
+                        <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
+                          Open
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -3037,6 +3166,15 @@ export default function App() {
                 <button className="secondary-btn" onClick={() => openProblemLink(activeProblem)}>
                   Practice
                 </button>
+                {activeRevisionState?.isScheduled && !activeRevisionState.isComplete ? (
+                  <button
+                    className="secondary-btn"
+                    disabled={completingRevisionIds.has(activeProblem._id)}
+                    onClick={() => void completeRevision(activeProblem)}
+                  >
+                    {completingRevisionIds.has(activeProblem._id) ? "Updating..." : "Revision done"}
+                  </button>
+                ) : null}
                 <button className="secondary-btn" onClick={() => openEditDrawer(activeProblem)}>
                   Full edit
                 </button>
@@ -4191,5 +4329,3 @@ const PatternFamilySection = memo(function PatternFamilySection({
     </section>
   );
 });
-
-
