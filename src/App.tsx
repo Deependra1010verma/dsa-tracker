@@ -1155,6 +1155,41 @@ function removeLocalProgressItem(key: string) {
   }
 }
 
+const SESSION_REVISED_STORAGE_KEY = "dsa-tracker-session-revised-ids";
+
+function readSessionRevisedIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_REVISED_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSessionRevisedIds(ids: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(SESSION_REVISED_STORAGE_KEY, JSON.stringify([...ids]));
+  } catch {
+    // ignore storage error
+  }
+}
+
+function deduplicateProblems(list: Problem[]): Problem[] {
+  const seen = new Set<string>();
+  const result: Problem[] = [];
+  for (const item of list) {
+    if (item && item._id && !seen.has(item._id)) {
+      seen.add(item._id);
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 function activityStorageKey(problemSet: string) {
   return `${LOCAL_ACTIVITY_STORAGE_PREFIX}:${problemSet || "set1"}`;
 }
@@ -1610,7 +1645,7 @@ export default function App() {
   const [workspaceSaveState, setWorkspaceSaveState] = useState<WorkspaceSaveState>("idle");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [completingRevisionIds, setCompletingRevisionIds] = useState<Set<string>>(() => new Set());
-  const [hiddenRevisionIds, setHiddenRevisionIds] = useState<Set<string>>(() => new Set());
+  const [hiddenRevisionIds, setHiddenRevisionIds] = useState<Set<string>>(() => readSessionRevisedIds());
   const [now, setNow] = useState(() => Date.now());
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
   const [isFocusMode, setIsFocusMode] = useState<boolean>(() => {
@@ -1754,7 +1789,7 @@ export default function App() {
 
       const mergedActivities = mergeActivityRecords(activitiesRes.activities, readLocalActivities(selectedProblemSet));
       setTopics(topicsRes.topics);
-      setProblems(patchedProblems);
+      setProblems(deduplicateProblems(patchedProblems));
       setActivities(mergedActivities);
       writeLocalActivities(selectedProblemSet, mergedActivities);
       void loadGeneralNotes();
@@ -1779,12 +1814,12 @@ export default function App() {
 
   const upsertProblem = useCallback((updatedProblem: Problem) => {
     setProblems((current) =>
-      current.map((problem) => (problem._id === updatedProblem._id ? updatedProblem : problem))
+      deduplicateProblems(current.map((problem) => (problem._id === updatedProblem._id ? updatedProblem : problem)))
     );
   }, []);
 
   const appendProblem = useCallback((updatedProblem: Problem) => {
-    setProblems((current) => [updatedProblem, ...current.filter((problem) => problem._id !== updatedProblem._id)]);
+    setProblems((current) => deduplicateProblems([updatedProblem, ...current.filter((problem) => problem._id !== updatedProblem._id)]));
   }, []);
 
   const removeProblem = useCallback((problemId: string) => {
@@ -2213,8 +2248,7 @@ export default function App() {
   }, [nowDate, revisionProblems, revisionStateMap]);
 
   const revisedSessionProblems = useMemo(() => {
-    return problems
-      .filter((problem) => hiddenRevisionIds.has(problem._id))
+    return deduplicateProblems(problems.filter((problem) => hiddenRevisionIds.has(problem._id)))
       .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
       .sort((left, right) => {
         const leftTime = toValidDate(left.problem.lastRevisionAt)?.getTime() ?? 0;
@@ -2588,11 +2622,18 @@ export default function App() {
   const completeRevision = useCallback(async (problem: Problem) => {
     try {
       setCompletingRevisionIds((prev) => new Set(prev).add(problem._id));
-      setHiddenRevisionIds((prev) => new Set(prev).add(problem._id));
+      setHiddenRevisionIds((prev) => {
+        const next = new Set(prev).add(problem._id);
+        saveSessionRevisedIds(next);
+        return next;
+      });
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/revision`, {
         method: "POST",
       });
       upsertProblem(response.problem);
+      saveLocalProgressItem(response.problem.title, { status: response.problem.status });
+      saveLocalProgressItem(response.problem._id, { status: response.problem.status });
+
       if (activeProblem?._id === problem._id) {
         setActiveProblem(response.problem);
         syncFormFromProblem(response.problem);
@@ -2603,6 +2644,7 @@ export default function App() {
       setHiddenRevisionIds((prev) => {
         const next = new Set(prev);
         next.delete(problem._id);
+        saveSessionRevisedIds(next);
         return next;
       });
       setError(err instanceof Error ? err.message : "Could not update revision schedule");

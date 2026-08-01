@@ -1054,9 +1054,12 @@ app.get(
     const brief = normalizeSearch(req.query.brief) === "1";
 
     if (storageMode === "memory") {
+      const seen = new Set<string>();
       const problems = memoryProblems
         .filter((problem) => {
           if (problem.topic.problemSet !== problemSet) return false;
+          if (seen.has(problem._id)) return false;
+          seen.add(problem._id);
           const matchesTopic = !topic || Boolean(search) || problem.topic._id === topic || problem.topic.slug === topic;
           const matchesDifficulty = !difficulty || problem.difficulty === difficulty;
           const matchesStatus = !status || problem.status === status;
@@ -1109,7 +1112,14 @@ app.get(
       );
     }
 
-    const problems = await query.lean();
+    const rawProblems = await query.lean();
+    const mongoSeen = new Set<string>();
+    const problems = rawProblems.filter((p: any) => {
+      const idStr = String(p._id);
+      if (mongoSeen.has(idStr)) return false;
+      mongoSeen.add(idStr);
+      return true;
+    });
 
     res.json({ problems });
   })
@@ -1419,12 +1429,17 @@ app.patch(
 
       if (statusChangedToUnsolved) {
         clearRevisionSchedule(problem);
-      } else if (statusChangedToSolved || statusChangedToRevisit) {
+      } else if (
+        (statusChangedToSolved || statusChangedToRevisit) &&
+        !problem.lastRevisionAt &&
+        !problem.nextRevisionAt
+      ) {
         startRevisionSchedule(problem, now);
       } else if (
         (problem.status === "solved" || problem.status === "revisit") &&
         !problem.nextRevisionAt &&
-        !problem.revisionCompletedAt
+        !problem.revisionCompletedAt &&
+        !problem.lastRevisionAt
       ) {
         startRevisionSchedule(problem, now);
       }
@@ -1484,12 +1499,17 @@ app.patch(
 
     if (statusChangedToUnsolved) {
       clearRevisionSchedule(problem);
-    } else if (statusChangedToSolved || statusChangedToRevisit) {
+    } else if (
+      (statusChangedToSolved || statusChangedToRevisit) &&
+      !problem.lastRevisionAt &&
+      !problem.nextRevisionAt
+    ) {
       startRevisionSchedule(problem, now);
     } else if (
       (problem.status === "solved" || problem.status === "revisit") &&
       !problem.nextRevisionAt &&
-      !problem.revisionCompletedAt
+      !problem.revisionCompletedAt &&
+      !problem.lastRevisionAt
     ) {
       startRevisionSchedule(problem, now);
     }
