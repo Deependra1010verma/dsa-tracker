@@ -1845,23 +1845,46 @@ export default function App() {
     }).catch((err) => {
       setError(err instanceof Error ? err.message : "Could not load problem details");
     });
+    setTimeout(() => {
+      const workspaceEl = document.querySelector(".problem-workspace");
+      if (workspaceEl) {
+        workspaceEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
   }, [hydrateProblemDetails, syncFormFromProblem]);
 
+  const handleWorkspaceClick = useCallback((problem: Problem) => {
+    if (hasNoteContent(problem)) {
+      setPreviewNoteProblem(problem);
+      void hydrateProblemDetails(problem).then((nextProblem) => {
+        if (hasNoteContent(nextProblem)) {
+          setPreviewNoteProblem(nextProblem);
+        }
+      }).catch(() => {});
+    } else {
+      openStudyView(problem);
+    }
+  }, [hydrateProblemDetails, openStudyView]);
+
   const openProblemById = useCallback(async (problemId: string) => {
-    const matchedProblem = problems.find((problem) => problem._id === problemId);
-    if (matchedProblem) {
-      openStudyView(matchedProblem);
-      return;
+    let matchedProblem = problems.find(
+      (problem) => problem._id === problemId || problem.title.toLowerCase() === problemId.toLowerCase()
+    );
+    if (!matchedProblem) {
+      try {
+        const response = await api<{ problem: Problem }>(`/api/problems/${problemId}`);
+        upsertProblem(response.problem);
+        matchedProblem = response.problem;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not open problem details");
+        return;
+      }
     }
 
-    try {
-      const response = await api<{ problem: Problem }>(`/api/problems/${problemId}`);
-      upsertProblem(response.problem);
-      openStudyView(response.problem);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open problem details");
+    if (matchedProblem && matchedProblem.platformUrl) {
+      openProblemLink(matchedProblem);
     }
-  }, [openStudyView, problems, setError, upsertProblem]);
+  }, [openProblemLink, problems, setError, upsertProblem]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -2302,18 +2325,7 @@ export default function App() {
 
 
 
-  const handleWorkspaceClick = useCallback((problem: Problem) => {
-    if (hasNoteContent(problem)) {
-      setPreviewNoteProblem(problem);
-      void hydrateProblemDetails(problem).then((nextProblem) => {
-        if (hasNoteContent(nextProblem)) {
-          setPreviewNoteProblem(nextProblem);
-        }
-      }).catch(() => {});
-    } else {
-      openStudyView(problem);
-    }
-  }, [hydrateProblemDetails, openStudyView]);
+
 
   const startRevisionPractice = useCallback((problem: Problem) => {
     openProblemLink(problem);
