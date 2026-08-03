@@ -3,7 +3,7 @@ import { topicSubCategories } from "./data/categories";
 import type { Prerequisite, PatternFamilyItem, GeneralNote } from "./api/types";
 import { GeneralNotesView } from "./components/GeneralNotesView";
 import { GeneralNoteModal } from "./components/GeneralNoteModal";
-import { addDays, deriveRevisionState, startOfDay, toValidDate } from "./revision";
+import { addDays, deriveRevisionState, startOfDay, toValidDate, SRS_PRESETS, type SrsPresetKey } from "./revision";
 
 
 type Difficulty = "Easy" | "Medium" | "Hard";
@@ -584,8 +584,8 @@ function formatRevisionDueText(daysAway: number | null, isDue: boolean, isComple
   return `${daysAway} days`;
 }
 
-function getRevisionState(problem: Problem, now: Date): RevisionState {
-  const derived = deriveRevisionState(problem, now);
+function getRevisionState(problem: Problem, now: Date, intervals?: number[]): RevisionState {
+  const derived = deriveRevisionState(problem, now, intervals);
   const nextStep = derived.currentIntervalDays;
 
   return {
@@ -1591,6 +1591,24 @@ export default function App() {
   const [revisitSubTab, setRevisitSubTab] = useState<"queue" | "heatmap" | "all">("queue");
   const [revisionSearch, setRevisionSearch] = useState("");
   const [revisionDifficulty, setRevisionDifficulty] = useState<Difficulty | "all">("all");
+  const [srsPresetKey, setSrsPresetKey] = useState<SrsPresetKey>(() => {
+    if (typeof window === "undefined") return "standard";
+    const saved = localStorage.getItem("dsa_srs_preset");
+    if (saved && saved in SRS_PRESETS) return saved as SrsPresetKey;
+    return "standard";
+  });
+  const [dueLaneExpanded, setDueLaneExpanded] = useState(false);
+  const [comingUpLaneExpanded, setComingUpLaneExpanded] = useState(false);
+  const [revisedTodayLaneExpanded, setRevisedTodayLaneExpanded] = useState(false);
+
+  const activeSrsPreset = SRS_PRESETS[srsPresetKey] ?? SRS_PRESETS.standard;
+
+  const handleSrsPresetChange = (newKey: SrsPresetKey) => {
+    setSrsPresetKey(newKey);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("dsa_srs_preset", newKey);
+    }
+  };
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
   const [isFocusMode, setIsFocusMode] = useState<boolean>(() => {
     if (typeof window === "undefined") {
@@ -1687,10 +1705,10 @@ export default function App() {
   const revisionStateMap = useMemo(() => {
     const map = new Map<string, RevisionState>();
     for (const problem of problems) {
-      map.set(problem._id, getRevisionState(problem, nowDate));
+      map.set(problem._id, getRevisionState(problem, nowDate, activeSrsPreset.intervals));
     }
     return map;
-  }, [nowDate, problems]);
+  }, [activeSrsPreset.intervals, nowDate, problems]);
 
   const handleSilentRefresh = useCallback(async () => {
     try {
@@ -3065,6 +3083,21 @@ export default function App() {
 
             {revisitSubTab === "queue" || revisitSubTab === "all" ? (
               <div className="revisit-toolbar">
+                <div className="srs-preset-control" title={activeSrsPreset.desc}>
+                  <span className="srs-preset-label">Schedule:</span>
+                  <select
+                    className="srs-preset-select"
+                    value={srsPresetKey}
+                    onChange={(e) => handleSrsPresetChange(e.target.value as SrsPresetKey)}
+                  >
+                    {Object.values(SRS_PRESETS).map((preset) => (
+                      <option key={preset.key} value={preset.key}>
+                        {preset.name} ({preset.badge})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="revisit-search-box">
                   <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>
@@ -3121,9 +3154,9 @@ export default function App() {
           <section className="revision-panel revision-dashboard">
             <div className="revision-dashboard-head">
               <div>
-                <p className="panel-label">Spaced repetition</p>
+                <p className="panel-label">Spaced repetition ({activeSrsPreset.name})</p>
                 <h3>Revision queue</h3>
-                <p className="section-note">{revisionProblems.length} unique items scheduled for revisit</p>
+                <p className="section-note">{revisionProblems.length} unique items scheduled · Pace: {activeSrsPreset.desc}</p>
               </div>
               <div className="revision-head-actions">
                 <button
@@ -3159,11 +3192,11 @@ export default function App() {
               <div className="revision-lane due-lane">
                 <div className="revision-lane-head">
                   <span className="revision-lane-kicker">Now</span>
-                  <strong>Due to revise</strong>
+                  <strong>Due to revise ({filteredDueRevisionProblems.length})</strong>
                 </div>
                 <div className="revision-list">
                   {filteredDueRevisionProblems.length > 0 ? (
-                    filteredDueRevisionProblems.map(({ problem, state }) => {
+                    (dueLaneExpanded ? filteredDueRevisionProblems : filteredDueRevisionProblems.slice(0, 5)).map(({ problem, state }) => {
                       const isChecked = state.isComplete || completingRevisionIds.has(problem._id);
                       return (
                         <article key={problem._id} className={`revision-card ${state.isOverdue ? "overdue" : "due"}`}>
@@ -3215,17 +3248,27 @@ export default function App() {
                   ) : (
                     <div className="revision-empty">No revision is due right now.</div>
                   )}
+
+                  {filteredDueRevisionProblems.length > 5 ? (
+                    <button
+                      type="button"
+                      className="lane-show-more-btn"
+                      onClick={() => setDueLaneExpanded(!dueLaneExpanded)}
+                    >
+                      {dueLaneExpanded ? "Show Less" : `Show ${filteredDueRevisionProblems.length - 5} more...`}
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
               <div className="revision-lane">
                 <div className="revision-lane-head">
                   <span className="revision-lane-kicker">Later</span>
-                  <strong>Coming up</strong>
+                  <strong>Coming up ({filteredSidebarRevisionProblems.length})</strong>
                 </div>
                 <div className="revision-list">
                   {filteredSidebarRevisionProblems.length > 0 ? (
-                    filteredSidebarRevisionProblems.map(({ problem, state }) => {
+                    (comingUpLaneExpanded ? filteredSidebarRevisionProblems : filteredSidebarRevisionProblems.slice(0, 5)).map(({ problem, state }) => {
                       const isChecked = completingRevisionIds.has(problem._id);
                       return (
                         <article key={problem._id} className="revision-card upcoming">
@@ -3277,17 +3320,27 @@ export default function App() {
                   ) : (
                     <div className="revision-empty">No upcoming revisions scheduled.</div>
                   )}
+
+                  {filteredSidebarRevisionProblems.length > 5 ? (
+                    <button
+                      type="button"
+                      className="lane-show-more-btn"
+                      onClick={() => setComingUpLaneExpanded(!comingUpLaneExpanded)}
+                    >
+                      {comingUpLaneExpanded ? "Show Less" : `Show ${filteredSidebarRevisionProblems.length - 5} more...`}
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
               <div className="revision-lane revised-lane">
                 <div className="revision-lane-head">
                   <span className="revision-lane-kicker">Session</span>
-                  <strong>Revised today</strong>
+                  <strong>Revised today ({filteredRevisedTodayProblems.length})</strong>
                 </div>
                 <div className="revision-list">
                   {filteredRevisedTodayProblems.length > 0 ? (
-                    filteredRevisedTodayProblems.map(({ problem, state }) => (
+                    (revisedTodayLaneExpanded ? filteredRevisedTodayProblems : filteredRevisedTodayProblems.slice(0, 5)).map(({ problem, state }) => (
                       <article key={problem._id} className="revision-card revised">
                         <button className="revision-check checked" disabled aria-label="Revision completed">
                           ✓
@@ -3326,6 +3379,16 @@ export default function App() {
                   ) : (
                     <div className="revision-empty">Today's completed revisions will appear here.</div>
                   )}
+
+                  {filteredRevisedTodayProblems.length > 5 ? (
+                    <button
+                      type="button"
+                      className="lane-show-more-btn"
+                      onClick={() => setRevisedTodayLaneExpanded(!revisedTodayLaneExpanded)}
+                    >
+                      {revisedTodayLaneExpanded ? "Show Less" : `Show ${filteredRevisedTodayProblems.length - 5} more...`}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>

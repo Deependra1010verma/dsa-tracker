@@ -5902,3 +5902,58 @@ a.problem-title-text {
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
 }
+
+/* SRS Preset Selector */
+.srs-preset-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.srs-preset-label {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.srs-preset-select {
+  background: transparent;
+  border: none;
+  color: #38bdf8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.srs-preset-select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+/* Smart Lane Expansion Button */
+.lane-show-more-btn {
+  width: 100%;
+  padding: 8px 12px;
+  margin-top: 6px;
+  border-radius: 12px;
+  border: 1px dashed rgba(125, 211, 252, 0.25);
+  background: rgba(56, 189, 248, 0.05);
+  color: #38bdf8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 160ms ease;
+  text-align: center;
+}
+
+.lane-show-more-btn:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(125, 211, 252, 0.45);
+}

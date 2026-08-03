@@ -2,6 +2,40 @@ const REVISION_INTERVALS_DAYS = [1, 3, 7, 14, 30, 60] as const;
 
 export const revisionIntervalsDays = [...REVISION_INTERVALS_DAYS] as number[];
 
+export type SrsPresetKey = "standard" | "aggressive" | "relaxed";
+
+export type SrsPresetConfig = {
+  key: SrsPresetKey;
+  name: string;
+  badge: string;
+  desc: string;
+  intervals: number[];
+};
+
+export const SRS_PRESETS: Record<SrsPresetKey, SrsPresetConfig> = {
+  standard: {
+    key: "standard",
+    name: "Standard SRS",
+    badge: "Balanced",
+    desc: "1d ➔ 3d ➔ 7d ➔ 14d ➔ 30d ➔ 60d",
+    intervals: [1, 3, 7, 14, 30, 60],
+  },
+  aggressive: {
+    key: "aggressive",
+    name: "Aggressive Prep",
+    badge: "Fast Pace",
+    desc: "1d ➔ 2d ➔ 4d ➔ 7d ➔ 14d ➔ 30d",
+    intervals: [1, 2, 4, 7, 14, 30],
+  },
+  relaxed: {
+    key: "relaxed",
+    name: "Relaxed Pace",
+    badge: "Long-term",
+    desc: "2d ➔ 5d ➔ 10d ➔ 20d ➔ 45d ➔ 90d",
+    intervals: [2, 5, 10, 20, 45, 90],
+  },
+};
+
 export type RevisionScheduleShape = {
   status?: string | null;
   solvedAt?: unknown;
@@ -61,31 +95,39 @@ export function baseRevisionAnchor(problem: RevisionScheduleShape) {
   );
 }
 
-export function initializeRevisionSchedule(problem: RevisionScheduleShape, anchorOverride?: Date) {
+export function initializeRevisionSchedule(
+  problem: RevisionScheduleShape,
+  anchorOverride?: Date,
+  intervals: number[] = revisionIntervalsDays
+) {
   const anchor = anchorOverride ?? baseRevisionAnchor(problem);
   problem.revisionStage = 0;
   problem.revisionCount = 0;
   problem.lastRevisionAt = anchor;
-  problem.nextRevisionAt = addDays(anchor, revisionIntervalsDays[0] ?? 1);
+  problem.nextRevisionAt = addDays(anchor, intervals[0] ?? 1);
   problem.revisionCompletedAt = undefined;
 }
 
-export function advanceRevisionSchedule(problem: RevisionScheduleShape, completedAt = new Date()) {
+export function advanceRevisionSchedule(
+  problem: RevisionScheduleShape,
+  completedAt = new Date(),
+  intervals: number[] = revisionIntervalsDays
+) {
   const currentStage = Math.max(problem.revisionStage ?? 0, 0);
   const nextStage = currentStage + 1;
 
   problem.revisionCount = Math.max(problem.revisionCount ?? 0, 0) + 1;
   problem.lastRevisionAt = completedAt;
 
-  if (nextStage >= revisionIntervalsDays.length) {
-    problem.revisionStage = revisionIntervalsDays.length;
+  if (nextStage >= intervals.length) {
+    problem.revisionStage = intervals.length;
     problem.nextRevisionAt = undefined;
     problem.revisionCompletedAt = completedAt;
     return;
   }
 
   problem.revisionStage = nextStage;
-  problem.nextRevisionAt = addDays(completedAt, revisionIntervalsDays[nextStage] ?? 1);
+  problem.nextRevisionAt = addDays(completedAt, intervals[nextStage] ?? 1);
   problem.revisionCompletedAt = undefined;
 }
 
@@ -97,7 +139,11 @@ export function clearRevisionSchedule(problem: RevisionScheduleShape) {
   problem.revisionCompletedAt = undefined;
 }
 
-export function deriveRevisionState(problem: RevisionScheduleShape, now = new Date()): DerivedRevisionState {
+export function deriveRevisionState(
+  problem: RevisionScheduleShape,
+  now = new Date(),
+  intervals: number[] = revisionIntervalsDays
+): DerivedRevisionState {
   const solvedAt = toValidDate(problem.solvedAt);
   const revisitAt = toValidDate(problem.revisitAt);
   const lastRevisionAt = toValidDate(problem.lastRevisionAt);
@@ -105,9 +151,9 @@ export function deriveRevisionState(problem: RevisionScheduleShape, now = new Da
   const completedAt = toValidDate(problem.revisionCompletedAt);
   const anchor = lastRevisionAt ?? revisitAt ?? solvedAt ?? toValidDate(problem.updatedAt) ?? now;
   const stageFromCount =
-    (problem.revisionCount ?? 0) > 0 ? Math.min((problem.revisionCount ?? 0) - 1, revisionIntervalsDays.length) : 0;
+    (problem.revisionCount ?? 0) > 0 ? Math.min((problem.revisionCount ?? 0) - 1, intervals.length) : 0;
   const stage = Math.max(problem.revisionStage ?? stageFromCount, 0);
-  const isComplete = Boolean(completedAt || (stage >= revisionIntervalsDays.length && !nextRevisionAt));
+  const isComplete = Boolean(completedAt || (stage >= intervals.length && !nextRevisionAt));
   const isScheduled = problem.status === "solved" || problem.status === "revisit";
 
   if (!isScheduled) {
@@ -123,7 +169,7 @@ export function deriveRevisionState(problem: RevisionScheduleShape, now = new Da
     };
   }
 
-  const fallbackDueDate = nextRevisionAt ?? addDays(anchor, revisionIntervalsDays[Math.min(stage, revisionIntervalsDays.length - 1)] ?? 1);
+  const fallbackDueDate = nextRevisionAt ?? addDays(anchor, intervals[Math.min(stage, intervals.length - 1)] ?? 1);
   const dueDate = isComplete ? null : fallbackDueDate;
   const daysAway = dueDate ? daysBetween(now, dueDate) : null;
   const dueDaysAway = daysAway ?? Number.POSITIVE_INFINITY;
@@ -136,6 +182,6 @@ export function deriveRevisionState(problem: RevisionScheduleShape, now = new Da
     isComplete,
     isScheduled: true,
     daysAway,
-    currentIntervalDays: isComplete ? null : revisionIntervalsDays[Math.min(stage, revisionIntervalsDays.length - 1)] ?? null,
+    currentIntervalDays: isComplete ? null : intervals[Math.min(stage, intervals.length - 1)] ?? null,
   };
 }
