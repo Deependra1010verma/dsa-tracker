@@ -1588,6 +1588,9 @@ export default function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [completingRevisionIds, setCompletingRevisionIds] = useState<Set<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
+  const [revisitSubTab, setRevisitSubTab] = useState<"queue" | "heatmap" | "all">("queue");
+  const [revisionSearch, setRevisionSearch] = useState("");
+  const [revisionDifficulty, setRevisionDifficulty] = useState<Difficulty | "all">("all");
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
   const [isFocusMode, setIsFocusMode] = useState<boolean>(() => {
     if (typeof window === "undefined") {
@@ -2226,13 +2229,22 @@ export default function App() {
     form.shortNote,
   ]);
 
-  const revisionProblems = useMemo(
-    () => problems.filter((problem) => {
+  const revisionProblems = useMemo(() => {
+    const seenTitles = new Set<string>();
+    const deduplicated: Problem[] = [];
+
+    for (const problem of problems) {
       const state = revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate);
-      return state.isScheduled && !state.isComplete;
-    }),
-    [nowDate, problems, revisionStateMap]
-  );
+      if (state.isScheduled && !state.isComplete) {
+        const normalizedTitle = problem.title.trim().toLowerCase();
+        if (!seenTitles.has(normalizedTitle)) {
+          seenTitles.add(normalizedTitle);
+          deduplicated.push(problem);
+        }
+      }
+    }
+    return deduplicated;
+  }, [nowDate, problems, revisionStateMap]);
 
   const dueRevisionProblems = useMemo(() => {
     return [...revisionProblems]
@@ -2271,7 +2283,7 @@ export default function App() {
   const revisedTodayProblems = useMemo(() => {
     const problemsById = new Map(problems.map((problem) => [problem._id, problem]));
     const todayKey = toDateKey(nowDate);
-    const seen = new Set<string>();
+    const seenTitles = new Set<string>();
 
     return activities
       .filter((activity) => activity.kind === "revision" && toDateKey(new Date(activity.occurredAt)) === todayKey)
@@ -2279,14 +2291,54 @@ export default function App() {
       .map((activity) => problemsById.get(activity.problem._id))
       .filter((problem): problem is Problem => Boolean(problem))
       .filter((problem) => {
-        if (seen.has(problem._id)) {
+        const normalizedTitle = problem.title.trim().toLowerCase();
+        if (seenTitles.has(normalizedTitle)) {
           return false;
         }
-        seen.add(problem._id);
+        seenTitles.add(normalizedTitle);
         return true;
       })
       .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }));
   }, [activities, nowDate, problems, revisionStateMap]);
+
+  const filteredDueRevisionProblems = useMemo(() => {
+    const query = revisionSearch.trim().toLowerCase();
+    return dueRevisionProblems.filter(({ problem }) => {
+      const matchesDiff = revisionDifficulty === "all" || problem.difficulty === revisionDifficulty;
+      const matchesQuery =
+        !query ||
+        problem.title.toLowerCase().includes(query) ||
+        problem.topic.name.toLowerCase().includes(query) ||
+        problem.platformName.toLowerCase().includes(query);
+      return matchesDiff && matchesQuery;
+    });
+  }, [dueRevisionProblems, revisionDifficulty, revisionSearch]);
+
+  const filteredSidebarRevisionProblems = useMemo(() => {
+    const query = revisionSearch.trim().toLowerCase();
+    return sidebarRevisionProblems.filter(({ problem }) => {
+      const matchesDiff = revisionDifficulty === "all" || problem.difficulty === revisionDifficulty;
+      const matchesQuery =
+        !query ||
+        problem.title.toLowerCase().includes(query) ||
+        problem.topic.name.toLowerCase().includes(query) ||
+        problem.platformName.toLowerCase().includes(query);
+      return matchesDiff && matchesQuery;
+    });
+  }, [revisionDifficulty, revisionSearch, sidebarRevisionProblems]);
+
+  const filteredRevisedTodayProblems = useMemo(() => {
+    const query = revisionSearch.trim().toLowerCase();
+    return revisedTodayProblems.filter(({ problem }) => {
+      const matchesDiff = revisionDifficulty === "all" || problem.difficulty === revisionDifficulty;
+      const matchesQuery =
+        !query ||
+        problem.title.toLowerCase().includes(query) ||
+        problem.topic.name.toLowerCase().includes(query) ||
+        problem.platformName.toLowerCase().includes(query);
+      return matchesDiff && matchesQuery;
+    });
+  }, [revisedTodayProblems, revisionDifficulty, revisionSearch]);
 
   const nextRevisionCandidate = dueRevisionProblems[0]?.problem ?? sidebarRevisionProblems[0]?.problem ?? null;
   const showRevisionDashboard =
@@ -2985,6 +3037,68 @@ export default function App() {
         ) : null}
 
         {statusFilter === "revisit" ? (
+          <div className="revisit-subtabs-bar">
+            <div className="revisit-segmented-control">
+              <button
+                type="button"
+                className={`revisit-tab-btn ${revisitSubTab === "queue" ? "active" : ""}`}
+                onClick={() => setRevisitSubTab("queue")}
+              >
+                <span>🎯 Revision Queue</span>
+                <span className="revisit-tab-count">{dueRevisionProblems.length + sidebarRevisionProblems.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`revisit-tab-btn ${revisitSubTab === "heatmap" ? "active" : ""}`}
+                onClick={() => setRevisitSubTab("heatmap")}
+              >
+                <span>📊 Activity & Heatmap</span>
+              </button>
+              <button
+                type="button"
+                className={`revisit-tab-btn ${revisitSubTab === "all" ? "active" : ""}`}
+                onClick={() => setRevisitSubTab("all")}
+              >
+                <span>📚 All Revisit View</span>
+              </button>
+            </div>
+
+            {revisitSubTab === "queue" || revisitSubTab === "all" ? (
+              <div className="revisit-toolbar">
+                <div className="revisit-search-box">
+                  <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                  </svg>
+                  <input
+                    type="text"
+                    placeholder="Search revision..."
+                    value={revisionSearch}
+                    onChange={(e) => setRevisionSearch(e.target.value)}
+                  />
+                  {revisionSearch ? (
+                    <button type="button" className="clear-search-btn" onClick={() => setRevisionSearch("")}>×</button>
+                  ) : null}
+                </div>
+
+                <div className="revisit-diff-pills">
+                  {(["all", "Easy", "Medium", "Hard"] as const).map((diff) => (
+                    <button
+                      key={diff}
+                      type="button"
+                      className={`diff-filter-pill ${diff.toLowerCase()} ${revisionDifficulty === diff ? "active" : ""}`}
+                      onClick={() => setRevisionDifficulty(diff)}
+                    >
+                      {diff === "all" ? "All Diff" : diff}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {statusFilter === "revisit" && (revisitSubTab === "heatmap" || revisitSubTab === "all") ? (
           <ActivityInsightsPanel
             insights={activityInsights}
             scopeLabel={selectedTopicData?.name ?? "All topics"}
@@ -3003,13 +3117,13 @@ export default function App() {
           />
         ) : null}
 
-        {showRevisionDashboard ? (
+        {statusFilter === "revisit" && (revisitSubTab === "queue" || revisitSubTab === "all") && showRevisionDashboard ? (
           <section className="revision-panel revision-dashboard">
             <div className="revision-dashboard-head">
               <div>
                 <p className="panel-label">Spaced repetition</p>
                 <h3>Revision queue</h3>
-                <p className="section-note">{revisionProblems.length} active items scheduled for revisit</p>
+                <p className="section-note">{revisionProblems.length} unique items scheduled for revisit</p>
               </div>
               <div className="revision-head-actions">
                 <button
@@ -3029,15 +3143,15 @@ export default function App() {
             <div className="revision-metrics">
               <div className="revision-metric-card urgent">
                 <span>Due</span>
-                <strong>{dueRevisionProblems.length}</strong>
+                <strong>{filteredDueRevisionProblems.length}</strong>
               </div>
               <div className="revision-metric-card">
                 <span>Coming up</span>
-                <strong>{sidebarRevisionProblems.length}</strong>
+                <strong>{filteredSidebarRevisionProblems.length}</strong>
               </div>
               <div className="revision-metric-card done">
                 <span>Revised today</span>
-                <strong>{revisedTodayProblems.length}</strong>
+                <strong>{filteredRevisedTodayProblems.length}</strong>
               </div>
             </div>
 
@@ -3048,8 +3162,8 @@ export default function App() {
                   <strong>Due to revise</strong>
                 </div>
                 <div className="revision-list">
-                  {dueRevisionProblems.length > 0 ? (
-                    dueRevisionProblems.map(({ problem, state }) => {
+                  {filteredDueRevisionProblems.length > 0 ? (
+                    filteredDueRevisionProblems.map(({ problem, state }) => {
                       const isChecked = state.isComplete || completingRevisionIds.has(problem._id);
                       return (
                         <article key={problem._id} className={`revision-card ${state.isOverdue ? "overdue" : "due"}`}>
@@ -3091,7 +3205,7 @@ export default function App() {
                           </div>
                           <div className="revision-card-actions">
                             <span className="revision-priority-pill">{getRevisionQueueMeta(problem, state).label}</span>
-                            <button className="revision-action" onClick={() => startRevisionPractice(problem)}>
+                            <button className="revision-action" onClick={() => openProblemLink(problem)}>
                               Open
                             </button>
                           </div>
@@ -3110,8 +3224,8 @@ export default function App() {
                   <strong>Coming up</strong>
                 </div>
                 <div className="revision-list">
-                  {sidebarRevisionProblems.length > 0 ? (
-                    sidebarRevisionProblems.map(({ problem, state }) => {
+                  {filteredSidebarRevisionProblems.length > 0 ? (
+                    filteredSidebarRevisionProblems.map(({ problem, state }) => {
                       const isChecked = completingRevisionIds.has(problem._id);
                       return (
                         <article key={problem._id} className="revision-card upcoming">
@@ -3172,8 +3286,8 @@ export default function App() {
                   <strong>Revised today</strong>
                 </div>
                 <div className="revision-list">
-                  {revisedTodayProblems.length > 0 ? (
-                    revisedTodayProblems.map(({ problem, state }) => (
+                  {filteredRevisedTodayProblems.length > 0 ? (
+                    filteredRevisedTodayProblems.map(({ problem, state }) => (
                       <article key={problem._id} className="revision-card revised">
                         <button className="revision-check checked" disabled aria-label="Revision completed">
                           ✓
@@ -4031,7 +4145,8 @@ function ActivityInsightsPanel({
     >();
 
     for (const item of selectedDay.items) {
-      const existing = grouped.get(item.problemId);
+      const titleKey = item.problemTitle.trim().toLowerCase();
+      const existing = grouped.get(titleKey);
       if (existing) {
         if (!existing.kinds.includes(item.kind)) {
           existing.kinds.push(item.kind);
@@ -4039,7 +4154,7 @@ function ActivityInsightsPanel({
         continue;
       }
 
-      grouped.set(item.problemId, {
+      grouped.set(titleKey, {
         problemId: item.problemId,
         problemTitle: item.problemTitle,
         topicId: item.topicId,
