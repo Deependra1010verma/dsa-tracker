@@ -3,6 +3,7 @@ import { topicSubCategories } from "./data/categories";
 import type { Prerequisite, PatternFamilyItem, GeneralNote } from "./api/types";
 import { GeneralNotesView } from "./components/GeneralNotesView";
 import { GeneralNoteModal } from "./components/GeneralNoteModal";
+import { addDays, deriveRevisionState, startOfDay, toValidDate } from "./revision";
 
 
 type Difficulty = "Easy" | "Medium" | "Hard";
@@ -132,8 +133,6 @@ const difficultyTone: Record<Difficulty, string> = {
   Medium: "tone-medium",
   Hard: "tone-hard",
 };
-
-const spacedRevisionDays = [1, 3, 7, 15, 30] as const;
 
 type RevisionState = {
   stage: number;
@@ -325,27 +324,6 @@ function buildRecallPrompts(problem: Problem): RecallPrompt[] {
       hint: problem.shortNote || "keep it short and focus on the core transition",
     },
   ];
-}
-
-function toValidDate(value?: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function startOfDay(date: Date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
 }
 
 function toDateKey(date: Date) {
@@ -607,48 +585,19 @@ function formatRevisionDueText(daysAway: number | null, isDue: boolean, isComple
 }
 
 function getRevisionState(problem: Problem, now: Date): RevisionState {
-  const solvedAt = toValidDate(problem.solvedAt);
-  const revisitAt = toValidDate(problem.revisitAt);
-  const lastRevisionAt = toValidDate(problem.lastRevisionAt);
-  const nextRevisionAt = toValidDate(problem.nextRevisionAt);
-  const completedAt = toValidDate(problem.revisionCompletedAt);
-  const anchor = lastRevisionAt ?? revisitAt ?? solvedAt ?? toValidDate(problem.updatedAt) ?? now;
-  const stage = Math.max(problem.revisionStage ?? (problem.revisionCount > 0 ? Math.min(problem.revisionCount - 1, spacedRevisionDays.length) : 0), 0);
-  const isComplete = Boolean(completedAt || (stage >= spacedRevisionDays.length && !nextRevisionAt));
-  const isScheduled = problem.status === "solved" || problem.status === "revisit";
-
-  if (!isScheduled) {
-    return {
-      stage,
-      label: "",
-      subtitle: "",
-      dueDate: null,
-      isDue: false,
-      isOverdue: false,
-      isComplete,
-      isScheduled: false,
-      daysAway: null,
-    };
-  }
-
-  const fallbackDueDate = nextRevisionAt ?? addDays(anchor, spacedRevisionDays[Math.min(stage, spacedRevisionDays.length - 1)] ?? 1);
-  const dueDate = isComplete ? null : fallbackDueDate;
-  const daysAway = dueDate ? daysBetween(now, dueDate) : null;
-  const dueDaysAway = daysAway ?? Number.POSITIVE_INFINITY;
-  const isDue = dueDate ? dueDaysAway <= 0 : false;
-  const isOverdue = dueDate ? dueDaysAway < 0 : false;
-  const nextStep = spacedRevisionDays[Math.min(stage, spacedRevisionDays.length - 1)];
+  const derived = deriveRevisionState(problem, now);
+  const nextStep = derived.currentIntervalDays;
 
   return {
-    stage,
-    label: isComplete ? "Revision complete" : stage === 0 ? "Tomorrow" : `${nextStep} days`,
-    subtitle: formatRevisionDueText(daysAway, isDue, isComplete),
-    dueDate,
-    isDue,
-    isOverdue,
-    isComplete,
-    isScheduled: true,
-    daysAway,
+    stage: derived.stage,
+    label: derived.isComplete ? "Revision complete" : nextStep === 1 ? "1 day" : `${nextStep} days`,
+    subtitle: formatRevisionDueText(derived.daysAway, derived.isDue, derived.isComplete),
+    dueDate: derived.dueDate,
+    isDue: derived.isDue,
+    isOverdue: derived.isOverdue,
+    isComplete: derived.isComplete,
+    isScheduled: derived.isScheduled,
+    daysAway: derived.daysAway,
   };
 }
 
@@ -1155,29 +1104,6 @@ function removeLocalProgressItem(key: string) {
   }
 }
 
-const SESSION_REVISED_STORAGE_KEY = "dsa-tracker-session-revised-ids";
-
-function readSessionRevisedIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = window.sessionStorage.getItem(SESSION_REVISED_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? new Set(parsed) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function saveSessionRevisedIds(ids: Set<string>) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(SESSION_REVISED_STORAGE_KEY, JSON.stringify([...ids]));
-  } catch {
-    // ignore storage error
-  }
-}
-
 function deduplicateProblems(list: Problem[]): Problem[] {
   const seen = new Set<string>();
   const result: Problem[] = [];
@@ -1218,6 +1144,23 @@ function mergeActivityRecords(...activityGroups: ActivityRecord[][]) {
     const rightTime = toValidDate(right.occurredAt)?.getTime() ?? 0;
     return rightTime - leftTime;
   });
+}
+
+function isRevisionActionable(problem: Problem, now: Date) {
+  const state = getRevisionState(problem, now);
+  if (!state.isScheduled || state.isComplete) {
+    return false;
+  }
+
+  const lastRevisionAt = toValidDate(problem.lastRevisionAt);
+  const lastRevisionDay = lastRevisionAt ? toDateKey(lastRevisionAt) : null;
+  const todayKey = toDateKey(now);
+
+  if ((problem.revisionCount ?? 0) > 0 && lastRevisionDay === todayKey) {
+    return false;
+  }
+
+  return true;
 }
 
 function readLocalActivities(problemSet: string): ActivityRecord[] {
@@ -1633,7 +1576,6 @@ export default function App() {
     setSelectedTopic("all");
     setDrawerOpen(false);
     setActiveProblem(null);
-    setHiddenRevisionIds(new Set());
   }, [selectedProblemSet]);
 
   const [drawerMode, setDrawerMode] = useState<"edit" | "notes">(persistedViewState.drawerMode ?? "notes");
@@ -1645,7 +1587,6 @@ export default function App() {
   const [workspaceSaveState, setWorkspaceSaveState] = useState<WorkspaceSaveState>("idle");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [completingRevisionIds, setCompletingRevisionIds] = useState<Set<string>>(() => new Set());
-  const [hiddenRevisionIds, setHiddenRevisionIds] = useState<Set<string>>(() => readSessionRevisedIds());
   const [now, setNow] = useState(() => Date.now());
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
   const [isFocusMode, setIsFocusMode] = useState<boolean>(() => {
@@ -1862,6 +1803,65 @@ export default function App() {
     upsertProblem(response.problem);
     return response.problem;
   }, [upsertProblem]);
+
+  const syncFormFromProblem = useCallback((problem: Problem) => {
+    skipWorkspaceAutosaveRef.current = true;
+    setForm({
+      title: problem.title,
+      topicId: problem.topic._id,
+      roadmapSection: problem.roadmapSection ?? "",
+      platformName: problem.platformName,
+      platformUrl: problem.platformUrl,
+      difficulty: problem.difficulty,
+      status: problem.status,
+      pattern: problem.pattern ?? "",
+      invariant: problem.invariant ?? "",
+      compareBruteForce: problem.compareBruteForce ?? "",
+      compareOptimized: problem.compareOptimized ?? "",
+      compareWhyBetter: problem.compareWhyBetter ?? "",
+      prerequisites: problem.prerequisites ? [...problem.prerequisites] : [],
+      rating: problem.rating ?? 0,
+      shortNote: problem.shortNote,
+      longNote: problem.longNote ?? "",
+      mistakeLog: problem.mistakeLog ?? composeMistakeLog(problem.mistakeTrigger ?? "", problem.mistakeReason ?? "", problem.mistakeFix ?? ""),
+      mistakeTrigger: problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger,
+      mistakeReason: problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason,
+      mistakeFix: problem.mistakeFix ?? splitMistakeLog(problem.mistakeLog).fix,
+      tags: problem.tags.join(", "),
+      priority: problem.priority,
+      isPinned: problem.isPinned,
+    });
+    setWorkspaceSaveState("idle");
+  }, []);
+
+  const openStudyView = useCallback((problem: Problem) => {
+    setPreviewNoteProblem(null);
+    setDrawerOpen(false);
+    setActiveProblem(problem);
+    syncFormFromProblem(problem);
+    void hydrateProblemDetails(problem).then((nextProblem) => {
+      setActiveProblem(nextProblem);
+      syncFormFromProblem(nextProblem);
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : "Could not load problem details");
+    });
+  }, [hydrateProblemDetails, syncFormFromProblem]);
+
+  const openProblemById = useCallback(async (problemId: string) => {
+    const matchedProblem = problems.find((problem) => problem._id === problemId);
+    if (matchedProblem) {
+      openStudyView(matchedProblem);
+      return;
+    }
+
+    try {
+      const response = await api<{ problem: Problem }>(`/api/problems/${problemId}`);
+      upsertProblem(response.problem);
+      openStudyView(response.problem);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open problem details");
+    }
+  }, [openStudyView, problems, setError, upsertProblem]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -2206,9 +2206,9 @@ export default function App() {
   const revisionProblems = useMemo(
     () => problems.filter((problem) => {
       const state = revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate);
-      return state.isScheduled && !state.isComplete && !hiddenRevisionIds.has(problem._id);
+      return state.isScheduled && !state.isComplete;
     }),
-    [hiddenRevisionIds, nowDate, problems, revisionStateMap]
+    [nowDate, problems, revisionStateMap]
   );
 
   const dueRevisionProblems = useMemo(() => {
@@ -2225,8 +2225,7 @@ export default function App() {
         const leftTime = left.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         const rightTime = right.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         return leftTime - rightTime;
-      })
-      .slice(0, 4);
+      });
   }, [nowDate, revisionProblems, revisionStateMap]);
 
   const sidebarRevisionProblems = useMemo(() => {
@@ -2243,23 +2242,32 @@ export default function App() {
         const leftTime = left.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         const rightTime = right.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         return leftTime - rightTime;
-      })
-      .slice(0, 8);
+      });
   }, [nowDate, revisionProblems, revisionStateMap]);
 
-  const revisedSessionProblems = useMemo(() => {
-    return deduplicateProblems(problems.filter((problem) => hiddenRevisionIds.has(problem._id)))
-      .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
-      .sort((left, right) => {
-        const leftTime = toValidDate(left.problem.lastRevisionAt)?.getTime() ?? 0;
-        const rightTime = toValidDate(right.problem.lastRevisionAt)?.getTime() ?? 0;
-        return rightTime - leftTime;
-      });
-  }, [hiddenRevisionIds, nowDate, problems, revisionStateMap]);
+  const revisedTodayProblems = useMemo(() => {
+    const problemsById = new Map(problems.map((problem) => [problem._id, problem]));
+    const todayKey = toDateKey(nowDate);
+    const seen = new Set<string>();
+
+    return activities
+      .filter((activity) => activity.kind === "revision" && toDateKey(new Date(activity.occurredAt)) === todayKey)
+      .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime())
+      .map((activity) => problemsById.get(activity.problem._id))
+      .filter((problem): problem is Problem => Boolean(problem))
+      .filter((problem) => {
+        if (seen.has(problem._id)) {
+          return false;
+        }
+        seen.add(problem._id);
+        return true;
+      })
+      .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }));
+  }, [activities, nowDate, problems, revisionStateMap]);
 
   const nextRevisionCandidate = dueRevisionProblems[0]?.problem ?? sidebarRevisionProblems[0]?.problem ?? null;
   const showRevisionDashboard =
-    statusFilter === "revisit" && (revisionProblems.length > 0 || revisedSessionProblems.length > 0);
+    statusFilter === "revisit" && (revisionProblems.length > 0 || revisedTodayProblems.length > 0);
 
   const toggleTopicExpanded = useCallback((topicId: string) => {
     setExpandedTopics((prev) => {
@@ -2292,48 +2300,7 @@ export default function App() {
     setDrawerOpen(true);
   }, [selectedTopic, selectedTopicData?.name, topics]);
 
-  const syncFormFromProblem = useCallback((problem: Problem) => {
-    skipWorkspaceAutosaveRef.current = true;
-    setForm({
-      title: problem.title,
-      topicId: problem.topic._id,
-      roadmapSection: problem.roadmapSection ?? "",
-      platformName: problem.platformName,
-      platformUrl: problem.platformUrl,
-      difficulty: problem.difficulty,
-      status: problem.status,
-      pattern: problem.pattern ?? "",
-      invariant: problem.invariant ?? "",
-      compareBruteForce: problem.compareBruteForce ?? "",
-      compareOptimized: problem.compareOptimized ?? "",
-      compareWhyBetter: problem.compareWhyBetter ?? "",
-      prerequisites: problem.prerequisites ? [...problem.prerequisites] : [],
-      rating: problem.rating ?? 0,
-      shortNote: problem.shortNote,
-      longNote: problem.longNote ?? "",
-      mistakeLog: problem.mistakeLog ?? composeMistakeLog(problem.mistakeTrigger ?? "", problem.mistakeReason ?? "", problem.mistakeFix ?? ""),
-      mistakeTrigger: problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger,
-      mistakeReason: problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason,
-      mistakeFix: problem.mistakeFix ?? splitMistakeLog(problem.mistakeLog).fix,
-      tags: problem.tags.join(", "),
-      priority: problem.priority,
-      isPinned: problem.isPinned,
-    });
-    setWorkspaceSaveState("idle");
-  }, []);
 
-  const openStudyView = useCallback((problem: Problem) => {
-    setPreviewNoteProblem(null);
-    setDrawerOpen(false);
-    setActiveProblem(problem);
-    syncFormFromProblem(problem);
-    void hydrateProblemDetails(problem).then((nextProblem) => {
-      setActiveProblem(nextProblem);
-      syncFormFromProblem(nextProblem);
-    }).catch((err) => {
-      setError(err instanceof Error ? err.message : "Could not load problem details");
-    });
-  }, [hydrateProblemDetails, syncFormFromProblem]);
 
   const handleWorkspaceClick = useCallback((problem: Problem) => {
     if (hasNoteContent(problem)) {
@@ -2605,8 +2572,8 @@ export default function App() {
       });
       upsertProblem(response.problem);
       if (activeProblem?._id === problem._id) {
-        setActiveProblem(response.problem);
-        syncFormFromProblem(response.problem);
+      setActiveProblem(response.problem);
+      syncFormFromProblem(response.problem);
       }
       if (problem.status !== "solved" && nextStatus === "solved") {
         appendActivityRecord("solved", response.problem, response.problem.topic);
@@ -2622,11 +2589,6 @@ export default function App() {
   const completeRevision = useCallback(async (problem: Problem) => {
     try {
       setCompletingRevisionIds((prev) => new Set(prev).add(problem._id));
-      setHiddenRevisionIds((prev) => {
-        const next = new Set(prev).add(problem._id);
-        saveSessionRevisedIds(next);
-        return next;
-      });
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/revision`, {
         method: "POST",
       });
@@ -2641,12 +2603,6 @@ export default function App() {
       appendActivityRecord("revision", response.problem, response.problem.topic, new Date(response.problem.lastRevisionAt ?? Date.now()));
       setNow(Date.now());
     } catch (err) {
-      setHiddenRevisionIds((prev) => {
-        const next = new Set(prev);
-        next.delete(problem._id);
-        saveSessionRevisedIds(next);
-        return next;
-      });
       setError(err instanceof Error ? err.message : "Could not update revision schedule");
     } finally {
       setCompletingRevisionIds((prev) => {
@@ -2857,9 +2813,9 @@ export default function App() {
           <div className="topic-dot revision-dot" />
           <div className="topic-copy">
             <span className="topic-name">Revisit</span>
-            <span className="topic-subtitle">{sidebarRevisionProblems.length} pending</span>
+            <span className="topic-subtitle">{revisionProblems.length} scheduled</span>
           </div>
-          <span className="topic-count">{sidebarRevisionProblems.length}</span>
+          <span className="topic-count">{revisionProblems.length}</span>
         </button>
 
         <button
@@ -3020,15 +2976,14 @@ export default function App() {
           <ActivityInsightsPanel
             insights={activityInsights}
             scopeLabel={selectedTopicData?.name ?? "All topics"}
+            problemLookup={new Map(problems.map((problem) => [problem._id, problem]))}
+            nowDate={nowDate}
             onOpenProblem={(problemId) => {
-              const matchedProblem = problems.find((problem) => problem._id === problemId);
-              if (matchedProblem) {
-                openStudyView(matchedProblem);
-              }
+              void openProblemById(problemId);
             }}
             onCompleteRevision={(problemId) => {
               const matchedProblem = problems.find((problem) => problem._id === problemId);
-              if (matchedProblem) {
+              if (matchedProblem && isRevisionActionable(matchedProblem, nowDate)) {
                 void completeRevision(matchedProblem);
               }
             }}
@@ -3045,11 +3000,6 @@ export default function App() {
                 <p className="section-note">{revisionProblems.length} active items scheduled for revisit</p>
               </div>
               <div className="revision-head-actions">
-                {revisedSessionProblems.length > 0 ? (
-                  <button className="revision-action ghost" onClick={() => setHiddenRevisionIds(new Set())}>
-                    Clear revised
-                  </button>
-                ) : null}
                 <button
                   className="revision-action"
                   disabled={!nextRevisionCandidate}
@@ -3074,8 +3024,8 @@ export default function App() {
                 <strong>{sidebarRevisionProblems.length}</strong>
               </div>
               <div className="revision-metric-card done">
-                <span>Revised</span>
-                <strong>{revisedSessionProblems.length}</strong>
+                <span>Revised today</span>
+                <strong>{revisedTodayProblems.length}</strong>
               </div>
             </div>
 
@@ -3207,11 +3157,11 @@ export default function App() {
               <div className="revision-lane revised-lane">
                 <div className="revision-lane-head">
                   <span className="revision-lane-kicker">Session</span>
-                  <strong>Revised now</strong>
+                  <strong>Revised today</strong>
                 </div>
                 <div className="revision-list">
-                  {revisedSessionProblems.length > 0 ? (
-                    revisedSessionProblems.map(({ problem, state }) => (
+                  {revisedTodayProblems.length > 0 ? (
+                    revisedTodayProblems.map(({ problem, state }) => (
                       <article key={problem._id} className="revision-card revised">
                         <button className="revision-check checked" disabled aria-label="Revision completed">
                           ✓
@@ -3235,7 +3185,7 @@ export default function App() {
                             </button>
                           </div>
                           <div className="revision-meta-row">
-                            <span>{state.isComplete ? "Revision cycle complete" : state.subtitle}</span>
+                            <span>{toValidDate(problem.lastRevisionAt) ? `Revised on ${formatActivityDate(toValidDate(problem.lastRevisionAt) ?? nowDate)}` : "Revised today"}</span>
                             <span>{problem.topic.name}</span>
                           </div>
                         </div>
@@ -3248,7 +3198,7 @@ export default function App() {
                       </article>
                     ))
                   ) : (
-                    <div className="revision-empty">Completed revisions will appear here.</div>
+                    <div className="revision-empty">Today's completed revisions will appear here.</div>
                   )}
                 </div>
               </div>
@@ -4010,12 +3960,16 @@ export default function App() {
 function ActivityInsightsPanel({
   insights,
   scopeLabel,
+  problemLookup,
+  nowDate,
   onOpenProblem,
   onCompleteRevision,
   onFilterTopic,
 }: {
   insights: ActivityInsights;
   scopeLabel: string;
+  problemLookup: Map<string, Problem>;
+  nowDate: Date;
   onOpenProblem: (problemId: string) => void;
   onCompleteRevision: (problemId: string) => void;
   onFilterTopic: (topicId: string) => void;
@@ -4090,6 +4044,16 @@ function ActivityInsightsPanel({
     expandedActivityDateKey === selectedDay?.dateKey ? groupedSelectedItems : groupedSelectedItems.slice(0, 5);
   const hiddenSelectedItemCount = Math.max(groupedSelectedItems.length - visibleSelectedItems.length, 0);
   const needsTodayAction = insights.todayCount === 0;
+  const actionableProblemIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of groupedSelectedItems) {
+      const problem = problemLookup.get(item.problemId);
+      if (problem && isRevisionActionable(problem, nowDate)) {
+        ids.add(item.problemId);
+      }
+    }
+    return ids;
+  }, [groupedSelectedItems, nowDate, problemLookup]);
   const streakGuardMessage =
     insights.currentStreak > 0
       ? needsTodayAction
@@ -4245,9 +4209,10 @@ function ActivityInsightsPanel({
                         <button
                           type="button"
                           className="primary-btn activity-action-btn"
+                          disabled={!actionableProblemIds.has(item.problemId)}
                           onClick={() => onCompleteRevision(item.problemId)}
                         >
-                          Revise done
+                          {actionableProblemIds.has(item.problemId) ? "Revise done" : "Already updated"}
                         </button>
                       ) : null}
                     </div>

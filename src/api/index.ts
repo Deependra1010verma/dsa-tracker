@@ -8,6 +8,7 @@ import { problemSeeds } from "./seed.js";
 import { problemSeeds2, topicSeeds2 } from "./seed2.js";
 import { problemSeeds3, topicSeeds3 } from "./seed3.js";
 import type { ActivityKind, ProblemStatus, GeneralNote, GeneralNoteCategory, GeneralNoteImportance } from "./types.js";
+import { addDays, advanceRevisionSchedule, baseRevisionAnchor, clearRevisionSchedule, initializeRevisionSchedule, revisionIntervalsDays, toValidDate } from "./revision.js";
 
 
 const allTopicSeeds = [
@@ -282,7 +283,6 @@ const app = express();
 const port = Number(process.env.PORT || 4000);
 const mongoUri = process.env.MONGODB_URI || "";
 const clientDist = path.resolve(process.cwd(), "dist/web");
-const spacedRevisionDays = [1, 3, 7, 15, 30] as const;
 let storageMode: "mongo" | "memory" = "mongo";
 let databaseReady = false;
 let databaseError = "";
@@ -353,12 +353,6 @@ function problemKeyForSeed(topicSlug: string, title: string) {
   return `${slugifySegment(topicSlug)}:${slugifySegment(title)}`;
 }
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
 function coerceDate(value: unknown) {
   if (value instanceof Date) {
     return value;
@@ -368,49 +362,74 @@ function coerceDate(value: unknown) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
-function baseRevisionAnchor(problem: {
-  solvedAt?: unknown;
-  revisitAt?: unknown;
-  lastRevisionAt?: unknown;
-  updatedAt?: unknown;
-}) {
-  return coerceDate(problem.lastRevisionAt ?? problem.revisitAt ?? problem.solvedAt ?? problem.updatedAt ?? new Date());
-}
-
 function startRevisionSchedule(problem: any, anchorOverride?: Date) {
-  const anchor = anchorOverride ?? baseRevisionAnchor(problem);
-  problem.revisionStage = 0;
-  problem.lastRevisionAt = anchor;
-  problem.nextRevisionAt = addDays(anchor, spacedRevisionDays[0]);
-  problem.revisionCompletedAt = undefined;
-  problem.revisionCount = Math.max(problem.revisionCount ?? 0, 0);
+  initializeRevisionSchedule(problem, anchorOverride);
 }
 
-function advanceRevisionSchedule(problem: any) {
-  const currentStage = Math.max(problem.revisionStage ?? 0, 0);
-  const nextStage = Math.min(currentStage + 1, spacedRevisionDays.length);
-  const now = new Date();
+function isRevisionActiveStatus(status: unknown): status is "solved" | "revisit" {
+  return status === "solved" || status === "revisit";
+}
 
-  problem.revisionCount = (problem.revisionCount ?? 0) + 1;
-  problem.lastRevisionAt = now;
+function syncRevisionScheduleForStatus(problem: any, previousStatus: unknown, now: Date) {
+  const statusChangedToRevisit = problem.status === "revisit" && previousStatus !== "revisit";
+  const statusChangedToUnscheduled = !isRevisionActiveStatus(problem.status);
+  const statusChangedFromUnscheduled = isRevisionActiveStatus(problem.status) && !isRevisionActiveStatus(previousStatus);
+  const hasExistingSchedule = Boolean(
+    toValidDate(problem.lastRevisionAt) || toValidDate(problem.nextRevisionAt) || toValidDate(problem.revisionCompletedAt)
+  );
 
-  if (nextStage >= spacedRevisionDays.length) {
-    problem.revisionStage = spacedRevisionDays.length;
-    problem.nextRevisionAt = undefined;
-    problem.revisionCompletedAt = now;
+  if (statusChangedToUnscheduled) {
+    clearRevisionSchedule(problem);
     return;
   }
 
-  problem.revisionStage = nextStage;
-  problem.nextRevisionAt = addDays(now, spacedRevisionDays[nextStage]);
-  problem.revisionCompletedAt = undefined;
+  if (statusChangedToRevisit) {
+    startRevisionSchedule(problem, now);
+    return;
+  }
+
+  if (statusChangedFromUnscheduled || !hasExistingSchedule) {
+    startRevisionSchedule(problem, now);
+    return;
+  }
+
+  if (problem.revisionCompletedAt && !problem.nextRevisionAt && problem.status === "solved") {
+    problem.lastRevisionAt = problem.lastRevisionAt ?? baseRevisionAnchor(problem);
+  }
 }
 
-function clearRevisionSchedule(problem: any) {
-  problem.revisionStage = 0;
-  problem.lastRevisionAt = undefined;
-  problem.nextRevisionAt = undefined;
-  problem.revisionCompletedAt = undefined;
+function isSameUtcDay(left: Date, right: Date) {
+  return (
+    left.getUTCFullYear() === right.getUTCFullYear() &&
+    left.getUTCMonth() === right.getUTCMonth() &&
+    left.getUTCDate() === right.getUTCDate()
+  );
+}
+
+function canCompleteRevisionToday(problem: {
+  status?: unknown;
+  revisionCount?: number;
+  revisionCompletedAt?: unknown;
+  lastRevisionAt?: unknown;
+}) {
+  if (!isRevisionActiveStatus(problem.status)) {
+    return false;
+  }
+
+  if (toValidDate(problem.revisionCompletedAt)) {
+    return false;
+  }
+
+  const lastRevisionAt = toValidDate(problem.lastRevisionAt);
+  if (!lastRevisionAt) {
+    return true;
+  }
+
+  if ((problem.revisionCount ?? 0) <= 0) {
+    return true;
+  }
+
+  return !isSameUtcDay(lastRevisionAt, new Date());
 }
 
 function seededProblemScore(problem: {
@@ -573,12 +592,12 @@ function seedProblemToMemoryProblem(seed: (typeof allProblemSeeds)[number]): Mem
     patternFamily: seed.patternFamily ? [...seed.patternFamily] : [],
     pattern: seed.pattern ?? "",
     rating: seed.rating ?? 0,
-    revisionCount: isSolvedLike ? 1 : 0,
-    revisionStage: isSolvedLike ? 0 : 0,
+    revisionCount: 0,
+    revisionStage: 0,
     solvedAt,
     revisitAt,
     lastRevisionAt: isSolvedLike ? now : undefined,
-    nextRevisionAt: isSolvedLike ? addDays(now, spacedRevisionDays[0]) : undefined,
+    nextRevisionAt: isSolvedLike ? addDays(now, revisionIntervalsDays[0] ?? 1) : undefined,
     tags: [...seed.tags],
     priority: seed.priority,
     isPinned: seed.isPinned,
@@ -899,13 +918,13 @@ async function ensureSeedProblems() {
           tags: seed.tags,
           priority: seed.priority,
           isPinned: seed.isPinned,
-          revisionCount: seed.revisionCount ?? 0,
-          revisionStage: seed.status === "solved" || seed.status === "revisit" ? 0 : 0,
+          revisionCount: 0,
+          revisionStage: 0,
           solvedAt: seed.status === "solved" ? new Date() : undefined,
           revisitAt: seed.status === "revisit" ? new Date() : undefined,
           lastRevisionAt: seed.status === "solved" || seed.status === "revisit" ? new Date() : undefined,
           nextRevisionAt:
-            seed.status === "solved" || seed.status === "revisit" ? addDays(new Date(), spacedRevisionDays[0]) : undefined,
+            seed.status === "solved" || seed.status === "revisit" ? addDays(new Date(), revisionIntervalsDays[0] ?? 1) : undefined,
         },
       },
       upsert: true,
@@ -969,7 +988,12 @@ async function recordMongoActivity(problem: { _id: unknown; topic: unknown }, ki
 async function backfillRevisionSchedules() {
   const problems = await Problem.find({
     status: { $in: ["solved", "revisit"] },
-    $or: [{ nextRevisionAt: { $exists: false } }, { nextRevisionAt: null }],
+    $or: [
+      { lastRevisionAt: { $exists: false } },
+      { lastRevisionAt: null },
+      { nextRevisionAt: { $exists: false }, revisionCompletedAt: { $exists: false } },
+      { nextRevisionAt: null, revisionCompletedAt: null },
+    ],
   });
 
   for (const problem of problems) {
@@ -1304,12 +1328,12 @@ app.post(
         prerequisites: Array.isArray(prerequisites) ? prerequisites : [],
         pattern,
         rating,
-        revisionCount: isSolvedLike ? 1 : 0,
-        revisionStage: isSolvedLike ? 0 : 0,
+        revisionCount: 0,
+        revisionStage: 0,
         solvedAt: status === "solved" ? now : undefined,
         revisitAt: status === "revisit" ? now : undefined,
         lastRevisionAt: isSolvedLike ? now : undefined,
-        nextRevisionAt: isSolvedLike ? addDays(now, spacedRevisionDays[0]) : undefined,
+        nextRevisionAt: isSolvedLike ? addDays(now, revisionIntervalsDays[0] ?? 1) : undefined,
         revisionCompletedAt: undefined,
         tags,
         priority,
@@ -1358,12 +1382,12 @@ app.post(
       tags,
       priority,
       isPinned,
-      revisionCount: isSolvedLike ? 1 : 0,
-      revisionStage: isSolvedLike ? 0 : 0,
+      revisionCount: 0,
+      revisionStage: 0,
       solvedAt,
       revisitAt,
       lastRevisionAt: isSolvedLike ? now : undefined,
-      nextRevisionAt: isSolvedLike ? addDays(now, spacedRevisionDays[0]) : undefined,
+      nextRevisionAt: isSolvedLike ? addDays(now, revisionIntervalsDays[0] ?? 1) : undefined,
     });
 
     if (created.solvedAt) {
@@ -1424,25 +1448,7 @@ app.patch(
       });
 
       const statusChangedToSolved = problem.status === "solved" && previousStatus !== "solved";
-      const statusChangedToRevisit = problem.status === "revisit" && previousStatus !== "revisit";
-      const statusChangedToUnsolved = problem.status === "unsolved" && previousStatus !== "unsolved";
-
-      if (statusChangedToUnsolved) {
-        clearRevisionSchedule(problem);
-      } else if (
-        (statusChangedToSolved || statusChangedToRevisit) &&
-        !problem.lastRevisionAt &&
-        !problem.nextRevisionAt
-      ) {
-        startRevisionSchedule(problem, now);
-      } else if (
-        (problem.status === "solved" || problem.status === "revisit") &&
-        !problem.nextRevisionAt &&
-        !problem.revisionCompletedAt &&
-        !problem.lastRevisionAt
-      ) {
-        startRevisionSchedule(problem, now);
-      }
+      syncRevisionScheduleForStatus(problem, previousStatus, now);
 
       if (problem.status === "solved" && previousStatus !== "solved") {
         problem.solvedAt = now;
@@ -1494,25 +1500,7 @@ app.patch(
     });
 
     const statusChangedToSolved = problem.status === "solved" && previousStatus !== "solved";
-    const statusChangedToRevisit = problem.status === "revisit" && previousStatus !== "revisit";
-    const statusChangedToUnsolved = problem.status === "unsolved" && previousStatus !== "unsolved";
-
-    if (statusChangedToUnsolved) {
-      clearRevisionSchedule(problem);
-    } else if (
-      (statusChangedToSolved || statusChangedToRevisit) &&
-      !problem.lastRevisionAt &&
-      !problem.nextRevisionAt
-    ) {
-      startRevisionSchedule(problem, now);
-    } else if (
-      (problem.status === "solved" || problem.status === "revisit") &&
-      !problem.nextRevisionAt &&
-      !problem.revisionCompletedAt &&
-      !problem.lastRevisionAt
-    ) {
-      startRevisionSchedule(problem, now);
-    }
+    syncRevisionScheduleForStatus(problem, previousStatus, now);
 
     if (problem.status === "solved" && previousStatus !== "solved") {
       problem.solvedAt = now;
@@ -1545,6 +1533,11 @@ app.post(
         problem.solvedAt = problem.solvedAt ?? new Date();
       }
 
+       if (!canCompleteRevisionToday(problem)) {
+        res.status(409).json({ message: "Revision already completed for this problem today or schedule is inactive." });
+        return;
+      }
+
       advanceRevisionSchedule(problem);
 
       problem.updatedAt = new Date();
@@ -1563,6 +1556,11 @@ app.post(
     if (problem.status === "unsolved") {
       problem.status = "solved";
       problem.solvedAt = problem.solvedAt ?? new Date();
+    }
+
+    if (!canCompleteRevisionToday(problem)) {
+      res.status(409).json({ message: "Revision already completed for this problem today or schedule is inactive." });
+      return;
     }
 
     advanceRevisionSchedule(problem);
