@@ -1723,6 +1723,16 @@ export default function App() {
         const saved = localProgress[problem.title] || localProgress[problem._id];
         if (!saved) return problem;
 
+        const serverUpdatedAt = problem.updatedAt ? new Date(problem.updatedAt).getTime() : 0;
+        const localUpdatedAt = saved.updatedAt ?? 0;
+
+        // If server version is newer or equal, remove stale local progress override
+        if (serverUpdatedAt >= localUpdatedAt) {
+          removeLocalProgressItem(problem.title);
+          removeLocalProgressItem(problem._id);
+          return problem;
+        }
+
         let modified = false;
         let nextStatus = problem.status;
         let nextPinned = problem.isPinned;

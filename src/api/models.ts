@@ -136,17 +136,11 @@ const generalNoteSchema = new mongoose.Schema(
 
 generalNoteSchema.index({ title: "text", summary: "text", content: "text", tags: "text" });
 
-const TopicModel = mongoose.model("Topic", topicSchema);
-export const Topic = (mongoose.models.Topic as typeof TopicModel) || TopicModel;
-
-const ProblemModel = mongoose.model("Problem", problemSchema);
-export const Problem = (mongoose.models.Problem as typeof ProblemModel) || ProblemModel;
-
-const ActivityModel = mongoose.model("Activity", activitySchema);
-export const Activity = (mongoose.models.Activity as typeof ActivityModel) || ActivityModel;
-
-const GeneralNoteModel = mongoose.model("GeneralNote", generalNoteSchema);
-export const GeneralNoteModelExport = (mongoose.models.GeneralNote as typeof GeneralNoteModel) || GeneralNoteModel;
+export const Topic = (mongoose.models.Topic as mongoose.Model<any>) || mongoose.model("Topic", topicSchema);
+export const Problem = (mongoose.models.Problem as mongoose.Model<any>) || mongoose.model("Problem", problemSchema);
+export const Activity = (mongoose.models.Activity as mongoose.Model<any>) || mongoose.model("Activity", activitySchema);
+export const GeneralNoteModelExport = (mongoose.models.GeneralNote as mongoose.Model<any>) || mongoose.model("GeneralNote", generalNoteSchema);
 
 export { topicSeeds };
+
 

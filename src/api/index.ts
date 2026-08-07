@@ -290,14 +290,29 @@ let databaseInitPromise: Promise<void> | null = null;
 
 app.use(express.json({ limit: "2mb" }));
 
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+});
+
 const asyncHandler = (handler: RequestHandler): RequestHandler => {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
   };
 };
 
+function getMongoUri(): string {
+  return (process.env.MONGODB_URI || "").trim();
+}
+
 async function initializeStorage() {
-  const currentMongoUri = process.env.MONGODB_URI || "";
+  const currentMongoUri = getMongoUri();
   if (!currentMongoUri) {
     storageMode = "memory";
     databaseReady = true;
@@ -319,6 +334,15 @@ async function initializeStorage() {
       await backfillRevisionSchedules();
       await ensureActivityHistory();
       console.log("Database seeding completed.");
+    } else {
+      await Problem.updateMany(
+        { $or: [{ problemSet: { $exists: false } }, { problemSet: null }] },
+        { $set: { problemSet: "set1" } }
+      );
+      await Topic.updateMany(
+        { $or: [{ problemSet: { $exists: false } }, { problemSet: null }] },
+        { $set: { problemSet: "set1" } }
+      );
     }
 
     databaseReady = true;
@@ -345,7 +369,7 @@ app.use(
       await databaseInitPromise;
     }
 
-    const currentMongoUri = process.env.MONGODB_URI || "";
+    const currentMongoUri = getMongoUri();
     if (currentMongoUri && !databaseReady) {
       databaseInitPromise = initializeStorage();
       await databaseInitPromise;
@@ -1123,7 +1147,10 @@ app.get(
       return;
     }
 
-    const filter: Record<string, unknown> = { problemSet };
+    const filter: Record<string, unknown> =
+      problemSet === "set1"
+        ? { $or: [{ problemSet: "set1" }, { problemSet: { $exists: false } }, { problemSet: null }] }
+        : { problemSet };
     if (topic && !search) {
       filter.topic = topic;
     }
