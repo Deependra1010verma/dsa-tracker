@@ -26,15 +26,24 @@ export async function connectDb(mongoUri: string) {
   }
 
   if (!mongooseCache.promise) {
-    mongoose.set("bufferCommands", false);
-    mongooseCache.promise = mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 3000,
-      connectTimeoutMS: 3000,
-      socketTimeoutMS: 5000,
-      family: 4,
-    });
+    mongoose.set("bufferCommands", true);
+    mongooseCache.promise = mongoose
+      .connect(mongoUri, {
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000,
+        socketTimeoutMS: 20000,
+        family: 4,
+      })
+      .then((m) => {
+        mongooseCache.conn = m;
+        return m;
+      })
+      .catch((err) => {
+        mongooseCache.promise = null;
+        mongooseCache.conn = null;
+        throw err;
+      });
   }
 
-  mongooseCache.conn = await mongooseCache.promise;
-  return mongooseCache.conn;
+  return await mongooseCache.promise;
 }

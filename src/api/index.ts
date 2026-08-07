@@ -297,25 +297,37 @@ const asyncHandler = (handler: RequestHandler): RequestHandler => {
 };
 
 async function initializeStorage() {
-  try {
-    await connectDb(mongoUri);
-    await ensureSeedTopics();
-    await ensureSeedProblems();
-    await ensureSeedGeneralNotes();
-    await backfillRevisionSchedules();
-    await ensureActivityHistory();
-    storageMode = "mongo";
-    databaseReady = true;
-    databaseError = "";
-    console.log("Database ready");
-  } catch (error) {
+  const currentMongoUri = process.env.MONGODB_URI || "";
+  if (!currentMongoUri) {
     storageMode = "memory";
     databaseReady = true;
-    databaseError =
-      error instanceof Error
-        ? `Mongo unavailable, using in-memory fallback: ${error.message}`
-        : "Mongo unavailable, using in-memory fallback";
+    databaseError = "No MONGODB_URI provided, using in-memory fallback";
     console.warn(databaseError);
+    return;
+  }
+
+  try {
+    await connectDb(currentMongoUri);
+    storageMode = "mongo";
+
+    const problemCount = await Problem.countDocuments();
+    if (problemCount === 0) {
+      console.log("Database is empty. Initializing seeds...");
+      await ensureSeedTopics();
+      await ensureSeedProblems();
+      await ensureSeedGeneralNotes();
+      await backfillRevisionSchedules();
+      await ensureActivityHistory();
+      console.log("Database seeding completed.");
+    }
+
+    databaseReady = true;
+    databaseError = "";
+    console.log("Database ready (mongo)");
+  } catch (error) {
+    databaseReady = false;
+    databaseError = error instanceof Error ? error.message : String(error);
+    console.error("Database initialization error:", databaseError);
   }
 }
 
@@ -331,6 +343,20 @@ app.use(
 
     if (databaseInitPromise) {
       await databaseInitPromise;
+    }
+
+    const currentMongoUri = process.env.MONGODB_URI || "";
+    if (currentMongoUri && !databaseReady) {
+      databaseInitPromise = initializeStorage();
+      await databaseInitPromise;
+    }
+
+    if (currentMongoUri && !databaseReady) {
+      res.status(503).json({
+        message: "Database connection failed. Please check MONGODB_URI and MongoDB Atlas network access.",
+        error: databaseError,
+      });
+      return;
     }
 
     next();
