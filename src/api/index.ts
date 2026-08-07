@@ -311,6 +311,14 @@ function getMongoUri(): string {
   return (process.env.MONGODB_URI || "").trim();
 }
 
+async function dropLegacyTopicIndexes() {
+  try {
+    await Topic.collection.dropIndex("name_1");
+  } catch {
+    // Index may already be dropped or not exist
+  }
+}
+
 async function initializeStorage() {
   const currentMongoUri = getMongoUri();
   if (!currentMongoUri) {
@@ -325,12 +333,14 @@ async function initializeStorage() {
     await connectDb(currentMongoUri);
     storageMode = "mongo";
 
+    await dropLegacyTopicIndexes();
+    await ensureSeedTopics();
+    await ensureSeedGeneralNotes();
+
     const problemCount = await Problem.countDocuments();
     if (problemCount === 0) {
       console.log("Database is empty. Initializing seeds...");
-      await ensureSeedTopics();
       await ensureSeedProblems();
-      await ensureSeedGeneralNotes();
       await backfillRevisionSchedules();
       await ensureActivityHistory();
       console.log("Database seeding completed.");
