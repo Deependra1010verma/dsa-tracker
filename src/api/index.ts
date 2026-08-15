@@ -322,6 +322,14 @@ async function dropLegacyTopicIndexes() {
 async function initializeStorage() {
   const currentMongoUri = getMongoUri();
   if (!currentMongoUri) {
+    if (process.env.NODE_ENV === "production") {
+      storageMode = "memory";
+      databaseReady = false;
+      databaseError = "MONGODB_URI is required in production for permanent storage.";
+      console.error(databaseError);
+      return;
+    }
+
     storageMode = "memory";
     databaseReady = true;
     databaseError = "No MONGODB_URI provided, using in-memory fallback";
@@ -393,6 +401,14 @@ app.use(
       return;
     }
 
+    if (!databaseReady) {
+      res.status(503).json({
+        message: "Permanent storage is not available. Please set MONGODB_URI before saving progress.",
+        error: databaseError,
+      });
+      return;
+    }
+
     next();
   })
 );
@@ -456,6 +472,31 @@ function syncRevisionScheduleForStatus(problem: any, previousStatus: unknown, no
   if (problem.revisionCompletedAt && !problem.nextRevisionAt && problem.status === "solved") {
     problem.lastRevisionAt = problem.lastRevisionAt ?? baseRevisionAnchor(problem);
   }
+}
+
+function patchDateField(target: any, source: Record<string, unknown>, field: string) {
+  if (!Object.prototype.hasOwnProperty.call(source, field)) {
+    return;
+  }
+
+  const value = source[field];
+  target[field] = value === null || value === "" || value === undefined ? undefined : coerceDate(value);
+}
+
+function applyRevisionProgressPatch(problem: any, next: Record<string, unknown>) {
+  if (typeof next.revisionCount === "number" && Number.isFinite(next.revisionCount)) {
+    problem.revisionCount = Math.max(0, Math.floor(next.revisionCount));
+  }
+
+  if (typeof next.revisionStage === "number" && Number.isFinite(next.revisionStage)) {
+    problem.revisionStage = Math.max(0, Math.floor(next.revisionStage));
+  }
+
+  patchDateField(problem, next, "solvedAt");
+  patchDateField(problem, next, "revisitAt");
+  patchDateField(problem, next, "lastRevisionAt");
+  patchDateField(problem, next, "nextRevisionAt");
+  patchDateField(problem, next, "revisionCompletedAt");
 }
 
 function isSameUtcDay(left: Date, right: Date) {
@@ -1510,15 +1551,15 @@ app.patch(
         updatedAt: now,
       });
 
-      const statusChangedToSolved = problem.status === "solved" && previousStatus !== "solved";
       syncRevisionScheduleForStatus(problem, previousStatus, now);
+      applyRevisionProgressPatch(problem, next);
 
       if (problem.status === "solved" && previousStatus !== "solved") {
-        problem.solvedAt = now;
+        problem.solvedAt = problem.solvedAt ?? now;
         appendMemoryActivity(problem, "solved", now);
       }
       if (problem.status === "revisit" && previousStatus !== "revisit") {
-        problem.revisitAt = now;
+        problem.revisitAt = problem.revisitAt ?? now;
         appendMemoryActivity(problem, "revisit", now);
       }
 
@@ -1562,15 +1603,15 @@ app.patch(
       isPinned: typeof next.isPinned === "boolean" ? next.isPinned : problem.isPinned,
     });
 
-    const statusChangedToSolved = problem.status === "solved" && previousStatus !== "solved";
     syncRevisionScheduleForStatus(problem, previousStatus, now);
+    applyRevisionProgressPatch(problem, next);
 
     if (problem.status === "solved" && previousStatus !== "solved") {
-      problem.solvedAt = now;
+      problem.solvedAt = problem.solvedAt ?? now;
       await recordMongoActivity(problem, "solved", now);
     }
     if (problem.status === "revisit" && previousStatus !== "revisit") {
-      problem.revisitAt = now;
+      problem.revisitAt = problem.revisitAt ?? now;
       await recordMongoActivity(problem, "revisit", now);
     }
 
@@ -1826,4 +1867,3 @@ if (!process.env.VERCEL) {
 }
 
 export default app;
-

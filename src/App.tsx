@@ -3,7 +3,7 @@ import { topicSubCategories } from "./data/categories";
 import type { Prerequisite, PatternFamilyItem, GeneralNote } from "./api/types";
 import { GeneralNotesView } from "./components/GeneralNotesView";
 import { GeneralNoteModal } from "./components/GeneralNoteModal";
-import { addDays, deriveRevisionState, startOfDay, toValidDate, SRS_PRESETS, type SrsPresetKey } from "./revision";
+import { addDays, advanceRevisionSchedule, clearRevisionSchedule, deriveRevisionState, initializeRevisionSchedule, startOfDay, toValidDate, SRS_PRESETS, type SrsPresetKey } from "./revision";
 
 
 type Difficulty = "Easy" | "Medium" | "Hard";
@@ -49,11 +49,11 @@ type Problem = {
   mistakeFix?: string;
   revisionCount: number;
   revisionStage?: number;
-  solvedAt?: string;
-  revisitAt?: string;
-  lastRevisionAt?: string;
-  nextRevisionAt?: string;
-  revisionCompletedAt?: string;
+  solvedAt?: string | null;
+  revisitAt?: string | null;
+  lastRevisionAt?: string | null;
+  nextRevisionAt?: string | null;
+  revisionCompletedAt?: string | null;
   tags: string[];
   priority: number;
   isPinned: boolean;
@@ -186,6 +186,7 @@ type SectionBlockProps = {
   onDelete: (problemId: string) => void;
   rowLimit: number;
   onLoadMore: () => void;
+  isRevisitView: boolean;
 };
 
 function formatRating(rating?: number) {
@@ -964,6 +965,7 @@ const SectionBlock = memo(function SectionBlock({
   onDelete,
   rowLimit,
   onLoadMore,
+  isRevisitView,
 }: SectionBlockProps) {
   const visibleProblems = group.problems.slice(0, rowLimit);
   const hasMore = group.problems.length > rowLimit;
@@ -976,7 +978,7 @@ const SectionBlock = memo(function SectionBlock({
             <span className="expand-arrow-sub" style={{ color: accent }}>•</span>
             <span className="section-name">{group.sectionName}</span>
             <span className="section-stats-badge">
-              {group.solvedCount} / {group.totalCount} Solved
+              {isRevisitView ? `${group.totalCount} Revision items` : `${group.solvedCount} / ${group.totalCount} Solved`}
             </span>
           </div>
         </td>
@@ -1062,6 +1064,13 @@ const LOCAL_ACTIVITY_STORAGE_PREFIX = "dsa-tracker-activity-history";
 type SavedProblemProgress = {
   status?: Status;
   isPinned?: boolean;
+  solvedAt?: string | null;
+  revisitAt?: string | null;
+  lastRevisionAt?: string | null;
+  nextRevisionAt?: string | null;
+  revisionCompletedAt?: string | null;
+  revisionCount?: number;
+  revisionStage?: number;
   updatedAt: number;
 };
 
@@ -1091,6 +1100,107 @@ function saveLocalProgressItem(key: string, updates: Partial<SavedProblemProgres
   } catch {
     // ignore storage error
   }
+}
+
+function saveLocalProgressForProblem(problem: Problem, updates: Partial<SavedProblemProgress>) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = readLocalProgress();
+    const updatedAt = Date.now();
+    for (const key of new Set([problem.title, problem._id])) {
+      if (!key) continue;
+      const existing = current[key] ?? { updatedAt };
+      current[key] = {
+        ...existing,
+        ...updates,
+        updatedAt,
+      };
+    }
+    window.localStorage.setItem(LOCAL_PROGRESS_STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    // ignore storage error
+  }
+}
+
+function getSavedProgressForProblem(problem: Problem, progress = readLocalProgress()) {
+  return progress[problem._id] ?? progress[problem.title] ?? null;
+}
+
+function applySavedProgress(problem: Problem, saved: SavedProblemProgress | null): Problem {
+  if (!saved) {
+    return problem;
+  }
+
+  return {
+    ...problem,
+    status: saved.status ?? problem.status,
+    isPinned: typeof saved.isPinned === "boolean" ? saved.isPinned : problem.isPinned,
+    solvedAt: saved.solvedAt ?? problem.solvedAt,
+    revisitAt: saved.revisitAt ?? problem.revisitAt,
+    lastRevisionAt: saved.lastRevisionAt ?? problem.lastRevisionAt,
+    nextRevisionAt:
+      Object.prototype.hasOwnProperty.call(saved, "nextRevisionAt") ? saved.nextRevisionAt ?? undefined : problem.nextRevisionAt,
+    revisionCompletedAt:
+      Object.prototype.hasOwnProperty.call(saved, "revisionCompletedAt")
+        ? saved.revisionCompletedAt ?? undefined
+        : problem.revisionCompletedAt,
+    revisionCount: typeof saved.revisionCount === "number" ? saved.revisionCount : problem.revisionCount,
+    revisionStage: typeof saved.revisionStage === "number" ? saved.revisionStage : problem.revisionStage,
+  };
+}
+
+function getProblemProgressSnapshot(problem: Problem): Partial<SavedProblemProgress> {
+  return {
+    status: problem.status,
+    isPinned: problem.isPinned,
+    solvedAt: problem.solvedAt,
+    revisitAt: problem.revisitAt,
+    lastRevisionAt: problem.lastRevisionAt,
+    nextRevisionAt: problem.nextRevisionAt ?? null,
+    revisionCompletedAt: problem.revisionCompletedAt ?? null,
+    revisionCount: problem.revisionCount,
+    revisionStage: problem.revisionStage,
+  };
+}
+
+function toIsoStringOrUndefined(value: unknown) {
+  return toValidDate(value)?.toISOString();
+}
+
+function normalizeProblemRevisionDates(problem: Problem): Problem {
+  return {
+    ...problem,
+    solvedAt: toIsoStringOrUndefined(problem.solvedAt),
+    revisitAt: toIsoStringOrUndefined(problem.revisitAt),
+    lastRevisionAt: toIsoStringOrUndefined(problem.lastRevisionAt),
+    nextRevisionAt: toIsoStringOrUndefined(problem.nextRevisionAt),
+    revisionCompletedAt: toIsoStringOrUndefined(problem.revisionCompletedAt),
+  };
+}
+
+function withStatusSchedule(problem: Problem, nextStatus: Status, nowDate: Date, intervals: number[]): Problem {
+  const nextProblem = normalizeProblemRevisionDates({
+    ...problem,
+    status: nextStatus,
+    updatedAt: nowDate.toISOString(),
+  });
+  const previousStatus = problem.status;
+
+  if (nextStatus === "solved" && previousStatus !== "solved") {
+    nextProblem.solvedAt = nowDate.toISOString();
+  }
+
+  if (nextStatus === "revisit" && previousStatus !== "revisit") {
+    nextProblem.revisitAt = nowDate.toISOString();
+  }
+
+  if ((nextStatus === "solved" || nextStatus === "revisit") && previousStatus !== nextStatus) {
+    initializeRevisionSchedule(nextProblem, nowDate, intervals);
+  } else if (nextStatus === "unsolved" || nextStatus === "skipped") {
+    clearRevisionSchedule(nextProblem);
+  }
+
+  return normalizeProblemRevisionDates(nextProblem);
 }
 
 function removeLocalProgressItem(key: string) {
@@ -1638,6 +1748,7 @@ export default function App() {
   const restoredViewRef = useRef(false);
   const skipWorkspaceAutosaveRef = useRef(false);
   const workspaceSaveTimerRef = useRef<number | null>(null);
+  const mutationSeqRef = useRef(new Map<string, number>());
   const deferredSearch = useDeferredValue(search);
   const nowDate = useMemo(() => new Date(now), [now]);
 
@@ -1720,7 +1831,7 @@ export default function App() {
 
       const localProgress = readLocalProgress();
       const patchedProblems = problemsRes.problems.map((problem) => {
-        const saved = localProgress[problem.title] || localProgress[problem._id];
+        const saved = getSavedProgressForProblem(problem, localProgress);
         if (!saved) return problem;
 
         const serverUpdatedAt = problem.updatedAt ? new Date(problem.updatedAt).getTime() : 0;
@@ -1733,27 +1844,24 @@ export default function App() {
           return problem;
         }
 
-        let modified = false;
-        let nextStatus = problem.status;
-        let nextPinned = problem.isPinned;
-
-        if (saved.status && saved.status !== problem.status) {
-          nextStatus = saved.status;
-          modified = true;
-        }
-
-        if (typeof saved.isPinned === "boolean" && saved.isPinned !== problem.isPinned) {
-          nextPinned = saved.isPinned;
-          modified = true;
-        }
+        const patchedProblem = applySavedProgress(problem, saved);
+        const modified =
+          patchedProblem.status !== problem.status ||
+          patchedProblem.isPinned !== problem.isPinned ||
+          patchedProblem.solvedAt !== problem.solvedAt ||
+          patchedProblem.revisitAt !== problem.revisitAt ||
+          patchedProblem.lastRevisionAt !== problem.lastRevisionAt ||
+          patchedProblem.nextRevisionAt !== problem.nextRevisionAt ||
+          patchedProblem.revisionCompletedAt !== problem.revisionCompletedAt ||
+          patchedProblem.revisionCount !== problem.revisionCount ||
+          patchedProblem.revisionStage !== problem.revisionStage;
 
         if (modified) {
           void api(`/api/problems/${problem._id}`, {
             method: "PATCH",
-            body: JSON.stringify({ status: nextStatus, isPinned: nextPinned }),
+            body: JSON.stringify(getProblemProgressSnapshot(patchedProblem)),
           }).catch(() => {});
-
-          return { ...problem, status: nextStatus, isPinned: nextPinned };
+          return patchedProblem;
         }
 
         return problem;
@@ -1786,7 +1894,21 @@ export default function App() {
 
   const upsertProblem = useCallback((updatedProblem: Problem) => {
     setProblems((current) =>
-      deduplicateProblems(current.map((problem) => (problem._id === updatedProblem._id ? updatedProblem : problem)))
+      deduplicateProblems(
+        current.map((problem) => {
+          if (problem._id !== updatedProblem._id) {
+            return problem;
+          }
+
+          const saved = getSavedProgressForProblem(updatedProblem);
+          if (!saved) {
+            return updatedProblem;
+          }
+
+          const serverUpdatedAt = updatedProblem.updatedAt ? new Date(updatedProblem.updatedAt).getTime() : 0;
+          return serverUpdatedAt >= saved.updatedAt ? updatedProblem : applySavedProgress(updatedProblem, saved);
+        })
+      )
     );
   }, []);
 
@@ -1820,6 +1942,16 @@ export default function App() {
     },
     [selectedProblemSet]
   );
+
+  const nextMutationSeq = useCallback((problemId: string) => {
+    const nextSeq = (mutationSeqRef.current.get(problemId) ?? 0) + 1;
+    mutationSeqRef.current.set(problemId, nextSeq);
+    return nextSeq;
+  }, []);
+
+  const isLatestMutation = useCallback((problemId: string, seq: number) => {
+    return mutationSeqRef.current.get(problemId) === seq;
+  }, []);
 
   const openProblemLink = useCallback((problem: Problem) => {
     window.open(problem.platformUrl, "_blank", "noopener,noreferrer");
@@ -2065,36 +2197,20 @@ export default function App() {
 
   const sortedFilteredProblems = useMemo(() => {
     return [...filteredProblems].sort((left, right) => {
-      if (statusFilter === "revisit") {
-        const leftRevision = revisionStateMap.get(left._id) ?? getRevisionState(left, nowDate);
-        const rightRevision = revisionStateMap.get(right._id) ?? getRevisionState(right, nowDate);
+      const effectiveSortBy = statusFilter === "revisit" && sortByFilter === "status" ? "optimal" : sortByFilter;
 
-        const leftRevisionScore = leftRevision.isOverdue ? 3 : leftRevision.isDue ? 2 : leftRevision.isScheduled ? 1 : 0;
-        const rightRevisionScore = rightRevision.isOverdue ? 3 : rightRevision.isDue ? 2 : rightRevision.isScheduled ? 1 : 0;
-        const revisionScoreDelta = rightRevisionScore - leftRevisionScore;
-        if (revisionScoreDelta !== 0) {
-          return revisionScoreDelta;
-        }
-
-        const leftDue = leftRevision.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
-        const rightDue = rightRevision.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
-        if (leftDue !== rightDue) {
-          return leftDue - rightDue;
-        }
-      }
-
-      if (sortByFilter === "status") {
+      if (effectiveSortBy === "status") {
         const statusMap: Record<Status, number> = { unsolved: 1, revisit: 2, solved: 3, skipped: 4 };
         const statusDelta = statusMap[left.status] - statusMap[right.status];
         if (statusDelta !== 0) return statusDelta;
-      } else if (sortByFilter === "difficulty") {
+      } else if (effectiveSortBy === "difficulty") {
         const diffMap: Record<Difficulty, number> = { Easy: 1, Medium: 2, Hard: 3 };
         const diffDelta = diffMap[left.difficulty] - diffMap[right.difficulty];
         if (diffDelta !== 0) return diffDelta;
-      } else if (sortByFilter === "rating") {
+      } else if (effectiveSortBy === "rating") {
         const ratingDelta = (right.rating ?? 0) - (left.rating ?? 0);
         if (ratingDelta !== 0) return ratingDelta;
-      } else if (sortByFilter === "title") {
+      } else if (effectiveSortBy === "title") {
         const titleDelta = left.title.localeCompare(right.title);
         if (titleDelta !== 0) return titleDelta;
       }
@@ -2127,7 +2243,7 @@ export default function App() {
 
       return left.title.localeCompare(right.title);
     });
-  }, [filteredProblems, nowDate, revisionStateMap, selectedTopic, sortByFilter, statusFilter]);
+  }, [filteredProblems, selectedTopic, sortByFilter, statusFilter]);
 
   const groupedByTopicAndSection = useMemo(() => {
     const topicGroups: Array<{
@@ -2654,45 +2770,73 @@ export default function App() {
   }, []);
 
   const updateStatus = useCallback(async (problem: Problem, nextStatus: Status) => {
-    try {
-      saveLocalProgressItem(problem.title, { status: nextStatus });
-      saveLocalProgressItem(problem._id, { status: nextStatus });
+    const seq = nextMutationSeq(problem._id);
+    const optimisticProblem = withStatusSchedule(problem, nextStatus, new Date(), activeSrsPreset.intervals);
+    saveLocalProgressForProblem(optimisticProblem, getProblemProgressSnapshot(optimisticProblem));
+    upsertProblem(optimisticProblem);
+    if (activeProblem?._id === problem._id) {
+      setActiveProblem(optimisticProblem);
+      syncFormFromProblem(optimisticProblem);
+    }
+    if (problem.status !== "solved" && nextStatus === "solved") {
+      appendActivityRecord("solved", optimisticProblem, optimisticProblem.topic);
+    } else if (problem.status !== "revisit" && nextStatus === "revisit") {
+      appendActivityRecord("revisit", optimisticProblem, optimisticProblem.topic);
+    }
+    setNow(Date.now());
 
+    try {
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: nextStatus }),
       });
+      if (!isLatestMutation(problem._id, seq)) {
+        return;
+      }
       upsertProblem(response.problem);
       if (activeProblem?._id === problem._id) {
-      setActiveProblem(response.problem);
-      syncFormFromProblem(response.problem);
-      }
-      if (problem.status !== "solved" && nextStatus === "solved") {
-        appendActivityRecord("solved", response.problem, response.problem.topic);
-      } else if (problem.status !== "revisit" && nextStatus === "revisit") {
-        appendActivityRecord("revisit", response.problem, response.problem.topic);
+        setActiveProblem(response.problem);
+        syncFormFromProblem(response.problem);
       }
       setNow(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update status");
     }
-  }, [activeProblem, appendActivityRecord, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
+  }, [activeProblem, activeSrsPreset.intervals, appendActivityRecord, isLatestMutation, nextMutationSeq, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
 
   const completeRevision = useCallback(async (problem: Problem) => {
+    const seq = nextMutationSeq(problem._id);
+    const completedAt = new Date();
+    const optimisticProblem = normalizeProblemRevisionDates({ ...problem, updatedAt: completedAt.toISOString() });
+    if (optimisticProblem.status === "unsolved") {
+      optimisticProblem.status = "solved";
+      optimisticProblem.solvedAt = optimisticProblem.solvedAt ?? completedAt.toISOString();
+    }
+    advanceRevisionSchedule(optimisticProblem, completedAt, activeSrsPreset.intervals);
+    saveLocalProgressForProblem(optimisticProblem, getProblemProgressSnapshot(optimisticProblem));
+    upsertProblem(optimisticProblem);
+    if (activeProblem?._id === problem._id) {
+      setActiveProblem(optimisticProblem);
+      syncFormFromProblem(optimisticProblem);
+    }
+    appendActivityRecord("revision", optimisticProblem, optimisticProblem.topic, completedAt);
+    setNow(Date.now());
+
     try {
       setCompletingRevisionIds((prev) => new Set(prev).add(problem._id));
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/revision`, {
         method: "POST",
       });
+      if (!isLatestMutation(problem._id, seq)) {
+        return;
+      }
       upsertProblem(response.problem);
-      saveLocalProgressItem(response.problem.title, { status: response.problem.status });
-      saveLocalProgressItem(response.problem._id, { status: response.problem.status });
+      saveLocalProgressForProblem(response.problem, getProblemProgressSnapshot(response.problem));
 
       if (activeProblem?._id === problem._id) {
         setActiveProblem(response.problem);
         syncFormFromProblem(response.problem);
       }
-      appendActivityRecord("revision", response.problem, response.problem.topic, new Date(response.problem.lastRevisionAt ?? Date.now()));
       setNow(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update revision schedule");
@@ -2703,7 +2847,7 @@ export default function App() {
         return next;
       });
     }
-  }, [activeProblem, appendActivityRecord, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
+  }, [activeProblem, activeSrsPreset.intervals, appendActivityRecord, isLatestMutation, nextMutationSeq, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
 
   const deleteProblem = useCallback(async (problemId: string) => {
     try {
@@ -2726,15 +2870,24 @@ export default function App() {
   }, [activeProblem, problems, removeProblem, setDrawerOpen, setActiveProblem, setError]);
 
   const togglePin = useCallback(async (problem: Problem) => {
-    try {
-      const nextPinned = !problem.isPinned;
-      saveLocalProgressItem(problem.title, { isPinned: nextPinned });
-      saveLocalProgressItem(problem._id, { isPinned: nextPinned });
+    const seq = nextMutationSeq(problem._id);
+    const nextPinned = !problem.isPinned;
+    const optimisticProblem = { ...problem, isPinned: nextPinned, updatedAt: new Date().toISOString() };
+    saveLocalProgressForProblem(optimisticProblem, getProblemProgressSnapshot(optimisticProblem));
+    upsertProblem(optimisticProblem);
+    if (activeProblem?._id === problem._id) {
+      setActiveProblem(optimisticProblem);
+      syncFormFromProblem(optimisticProblem);
+    }
 
+    try {
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}`, {
         method: "PATCH",
         body: JSON.stringify({ isPinned: nextPinned }),
       });
+      if (!isLatestMutation(problem._id, seq)) {
+        return;
+      }
       upsertProblem(response.problem);
       if (activeProblem?._id === problem._id) {
         setActiveProblem(response.problem);
@@ -2743,7 +2896,7 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not toggle pin");
     }
-  }, [activeProblem, setError, syncFormFromProblem, upsertProblem]);
+  }, [activeProblem, isLatestMutation, nextMutationSeq, setError, syncFormFromProblem, upsertProblem]);
 
   const progress = stats && stats.totalProblems > 0 ? Math.round((stats.solvedProblems / stats.totalProblems) * 100) : 0;
   const visibleProgress =
@@ -3658,7 +3811,9 @@ export default function App() {
                                   </span>
                                   <span className="topic-name">{group.topicName}</span>
                                   <span className="topic-stats-badge">
-                                    {group.solvedCount} / {group.totalCount} Solved
+                                    {statusFilter === "revisit"
+                                      ? `${group.totalCount} Revision items`
+                                      : `${group.solvedCount} / ${group.totalCount} Solved`}
                                   </span>
                                 </div>
                               </td>
@@ -3682,6 +3837,7 @@ export default function App() {
                                     onDelete={deleteProblem}
                                     rowLimit={sectionRowLimit}
                                     onLoadMore={() => setSectionRowLimit((value) => value + 30)}
+                                    isRevisitView={statusFilter === "revisit"}
                                   />
                                 ))
                               : null}
@@ -3706,6 +3862,7 @@ export default function App() {
                             onDelete={deleteProblem}
                             rowLimit={sectionRowLimit}
                             onLoadMore={() => setSectionRowLimit((value) => value + 30)}
+                            isRevisitView={statusFilter === "revisit"}
                           />
                         ))
                       )}
