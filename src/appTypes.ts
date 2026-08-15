@@ -177,3 +177,40 @@ export type ActivityInsights = {
   lastActiveLabel: string;
   weeks: ActivityWeek[];
 };
+
+export type RecallPrompt = {
+  question: string;
+  hint: string;
+};
+
+export type RatingFilterOption = "all" | "10" | "8-9" | "5-7";
+
+export type PersistedViewState = {
+  search?: string;
+  statusFilter?: Status | "all" | "revisit";
+  difficultyFilter?: Difficulty | "all";
+  ratingFilter?: RatingFilterOption;
+  selectedTopic?: string;
+  selectedProblemSet?: string;
+  activeProblemId?: string | null;
+  drawerOpen?: boolean;
+  drawerMode?: "edit" | "notes";
+};
+
+export type WorkspaceSaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
+export type SavedProblemProgress = {
+  status?: Status;
+  isPinned?: boolean;
+  solvedAt?: string | null;
+  revisitAt?: string | null;
+  lastRevisionAt?: string | null;
+  nextRevisionAt?: string | null;
+  revisionCompletedAt?: string | null;
+  revisionCount?: number;
+  revisionStage?: number;
+  updatedAt: number;
+};
+
+export type LocalProgressMap = Record<string, SavedProblemProgress>;
+
