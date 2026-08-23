@@ -343,6 +343,17 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // Warn user before closing tab if there are unsaved workspace changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (workspaceSaveTimerRef.current !== null) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
   const didInitialLoadRef = useRef(false);
   const restoredViewRef = useRef(false);
   const skipWorkspaceAutosaveRef = useRef(false);
@@ -1219,7 +1230,10 @@ export default function App() {
       if (!activeProblem && !options?.keepWorkspaceOpen) {
         setForm(emptyForm);
       }
-      void loadData({ silent: true });
+      // Only do a full silent refresh on manual saves (drawer/form), not on every workspace autosave
+      if (!options?.keepWorkspaceOpen) {
+        void loadData({ silent: true });
+      }
       setWorkspaceSaveState("saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save problem");

@@ -25,6 +25,12 @@ export async function connectDb(mongoUri: string) {
     return mongooseCache.conn;
   }
 
+  // Clear stale connection so we rebuild it on next request
+  if (mongooseCache.conn && mongoose.connection.readyState !== 1) {
+    mongooseCache.conn = null;
+    mongooseCache.promise = null;
+  }
+
   if (!mongooseCache.promise) {
     mongoose.set("bufferCommands", true);
     mongooseCache.promise = mongoose

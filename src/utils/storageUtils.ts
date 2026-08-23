@@ -250,18 +250,26 @@ export function writeLocalActivities(problemSet: string, activities: ActivityRec
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-    ...init,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000); // 30s timeout
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: "Request failed" }));
-    throw new Error(error.message || "Request failed");
+  try {
+    const response = await fetch(path, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+      signal: init?.signal ?? controller.signal,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Request failed" }));
+      throw new Error(error.message || "Request failed");
+    }
+
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return response.json();
 }

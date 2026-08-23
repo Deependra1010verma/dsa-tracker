@@ -537,6 +537,7 @@ function seededProblemScore(problem: {
   status?: string;
   shortNote?: string;
   longNote?: string;
+  codeSnippet?: string;
   mistakeLog?: string;
   mistakeTrigger?: string;
   mistakeReason?: string;
@@ -558,6 +559,7 @@ function seededProblemScore(problem: {
     problem.status && problem.status !== "unsolved" ? 10 : 0,
     problem.shortNote ? 3 : 0,
     problem.longNote ? 4 : 0,
+    problem.codeSnippet ? 2 : 0,
     problem.mistakeLog ? 4 : 0,
     problem.mistakeTrigger ? 2 : 0,
     problem.mistakeReason ? 2 : 0,
@@ -603,6 +605,7 @@ type MemoryProblem = {
   status: ProblemStatus;
   shortNote: string;
   longNote: string;
+  codeSnippet: string;
   mistakeLog: string;
   mistakeTrigger: string;
   mistakeReason: string;
@@ -681,6 +684,7 @@ function seedProblemToMemoryProblem(seed: (typeof allProblemSeeds)[number]): Mem
     status: seed.status,
     shortNote: seed.shortNote,
     longNote: seed.longNote,
+    codeSnippet: "",
     mistakeLog: seed.mistakeLog ?? "",
     mistakeTrigger: seed.mistakeTrigger ?? "",
     mistakeReason: seed.mistakeReason ?? "",
@@ -762,7 +766,7 @@ function toMemoryProblemResponse(problem: MemoryProblem, brief = false) {
     status: problem.status,
     shortNote: problem.shortNote,
     longNote: brief ? undefined : problem.longNote,
-    codeSnippet: brief ? undefined : (problem as any).codeSnippet,
+    codeSnippet: brief ? undefined : problem.codeSnippet,
     mistakeLog: brief ? undefined : problem.mistakeLog,
     mistakeTrigger: brief ? undefined : problem.mistakeTrigger,
     mistakeReason: brief ? undefined : problem.mistakeReason,
