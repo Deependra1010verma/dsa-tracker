@@ -7,6 +7,7 @@ interface EditableCodeBlockProps {
   onChange: (val: string) => void;
   placeholder?: string;
   minHeight?: number;
+  language?: string;
 }
 
 export function EditableCodeBlock({
@@ -14,6 +15,7 @@ export function EditableCodeBlock({
   onChange,
   placeholder = "Paste your core implementation code here...",
   minHeight = 200,
+  language = "cpp",
 }: EditableCodeBlockProps) {
   // We ensure the textarea and the pre have the exact same text,
   // with an extra newline at the end so the scroll area matches correctly.

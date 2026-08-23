@@ -606,6 +606,7 @@ type MemoryProblem = {
   shortNote: string;
   longNote: string;
   codeSnippet: string;
+  codeSnippetLang: string;
   mistakeLog: string;
   mistakeTrigger: string;
   mistakeReason: string;
@@ -685,6 +686,7 @@ function seedProblemToMemoryProblem(seed: (typeof allProblemSeeds)[number]): Mem
     shortNote: seed.shortNote,
     longNote: seed.longNote,
     codeSnippet: "",
+    codeSnippetLang: "cpp",
     mistakeLog: seed.mistakeLog ?? "",
     mistakeTrigger: seed.mistakeTrigger ?? "",
     mistakeReason: seed.mistakeReason ?? "",
@@ -767,6 +769,7 @@ function toMemoryProblemResponse(problem: MemoryProblem, brief = false) {
     shortNote: problem.shortNote,
     longNote: brief ? undefined : problem.longNote,
     codeSnippet: brief ? undefined : problem.codeSnippet,
+    codeSnippetLang: brief ? undefined : problem.codeSnippetLang,
     mistakeLog: brief ? undefined : problem.mistakeLog,
     mistakeTrigger: brief ? undefined : problem.mistakeTrigger,
     mistakeReason: brief ? undefined : problem.mistakeReason,
@@ -1389,6 +1392,7 @@ app.post(
       shortNote = "",
       longNote = "",
       codeSnippet = "",
+      codeSnippetLang = "cpp",
       mistakeLog = "",
       mistakeTrigger = "",
       mistakeReason = "",
@@ -1428,6 +1432,7 @@ app.post(
         shortNote,
         longNote,
         codeSnippet,
+        codeSnippetLang,
         mistakeLog,
         mistakeTrigger,
         mistakeReason,
@@ -1482,6 +1487,7 @@ app.post(
       shortNote,
       longNote,
       codeSnippet,
+      codeSnippetLang,
       mistakeLog,
       mistakeTrigger,
       mistakeReason,
@@ -1545,6 +1551,7 @@ app.patch(
         shortNote: next.shortNote ?? problem.shortNote,
         longNote: next.longNote ?? problem.longNote,
         codeSnippet: next.codeSnippet ?? problem.codeSnippet,
+        codeSnippetLang: next.codeSnippetLang ?? problem.codeSnippetLang,
         mistakeLog: next.mistakeLog ?? problem.mistakeLog,
         mistakeTrigger: next.mistakeTrigger ?? problem.mistakeTrigger,
         mistakeReason: next.mistakeReason ?? problem.mistakeReason,
@@ -1599,6 +1606,7 @@ app.patch(
       shortNote: next.shortNote ?? problem.shortNote,
       longNote: next.longNote ?? problem.longNote,
       codeSnippet: next.codeSnippet ?? problem.codeSnippet,
+      codeSnippetLang: next.codeSnippetLang ?? problem.codeSnippetLang,
       mistakeLog: next.mistakeLog ?? problem.mistakeLog,
       mistakeTrigger: next.mistakeTrigger ?? problem.mistakeTrigger,
       mistakeReason: next.mistakeReason ?? problem.mistakeReason,

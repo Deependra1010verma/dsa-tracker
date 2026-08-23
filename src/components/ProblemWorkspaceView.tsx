@@ -1,7 +1,43 @@
+import { useState, useEffect } from "react";
 import type { Problem, ProblemFormState, RevisionState } from "../appTypes";
 import { PatternFamilySection, ProblemPrerequisitesSection } from "./PrerequisitesSections";
 import { ActiveRecallPanel, SectionBadge } from "./StatCards";
 import { EditableCodeBlock } from "./EditableCodeBlock";
+
+const SUPPORTED_LANGUAGES = [
+  { value: "cpp", label: "C++" },
+  { value: "java", label: "Java" },
+  { value: "python", label: "Python" },
+  { value: "javascript", label: "JavaScript" },
+  { value: "typescript", label: "TypeScript" },
+  { value: "c", label: "C" },
+  { value: "go", label: "Go" },
+  { value: "rust", label: "Rust" },
+];
+
+function useRelativeTime(date: Date | null) {
+  const [label, setLabel] = useState("");
+
+  useEffect(() => {
+    if (!date) { setLabel(""); return; }
+
+    function compute() {
+      const secs = Math.floor((Date.now() - date!.getTime()) / 1000);
+      if (secs < 5) return "just now";
+      if (secs < 60) return `${secs}s ago`;
+      const mins = Math.floor(secs / 60);
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      return `${hours}h ago`;
+    }
+
+    setLabel(compute());
+    const id = setInterval(() => setLabel(compute()), 10_000);
+    return () => clearInterval(id);
+  }, [date]);
+
+  return label;
+}
 
 export type ProblemWorkspaceViewProps = {
   activeProblem: Problem;
@@ -9,6 +45,7 @@ export type ProblemWorkspaceViewProps = {
   form: ProblemFormState;
   setForm: React.Dispatch<React.SetStateAction<ProblemFormState>>;
   workspaceSaveState: "idle" | "dirty" | "saving" | "saved" | "error";
+  lastSavedAt: Date | null;
   activeWorkspaceIndex: number;
   workspaceProblemIds: string[];
   previousWorkspaceProblem: Problem | null;
@@ -29,6 +66,7 @@ export function ProblemWorkspaceView({
   form,
   setForm,
   workspaceSaveState,
+  lastSavedAt,
   activeWorkspaceIndex,
   workspaceProblemIds,
   previousWorkspaceProblem,
@@ -42,6 +80,19 @@ export function ProblemWorkspaceView({
   onOpenEditDrawer,
   onSaveProblem,
 }: ProblemWorkspaceViewProps) {
+  const savedAgoLabel = useRelativeTime(lastSavedAt);
+
+  const saveIndicatorText =
+    workspaceSaveState === "dirty"
+      ? "Unsaved changes"
+      : workspaceSaveState === "saving"
+      ? "Saving..."
+      : workspaceSaveState === "saved"
+      ? `Saved${savedAgoLabel ? ` · ${savedAgoLabel}` : ""}`
+      : workspaceSaveState === "error"
+      ? "Save failed"
+      : "Autosave on";
+
   return (
     <section className="problem-workspace">
       <div className="problem-workspace-head">
@@ -54,15 +105,7 @@ export function ProblemWorkspaceView({
             {activeProblem.topic.name} · {activeProblem.platformName} · {activeProblem.difficulty}
           </p>
           <p className={`workspace-save-indicator workspace-save-${workspaceSaveState}`}>
-            {workspaceSaveState === "dirty"
-              ? "Unsaved changes"
-              : workspaceSaveState === "saving"
-              ? "Saving..."
-              : workspaceSaveState === "saved"
-              ? "Saved"
-              : workspaceSaveState === "error"
-              ? "Save failed"
-              : "Autosave on"}
+            {saveIndicatorText}
           </p>
         </div>
 
@@ -141,10 +184,30 @@ export function ProblemWorkspaceView({
                 />
               </label>
               <div className="workspace-editor-field" style={{ gridColumn: "1 / -1" }}>
-                <span className="study-note-label">Code Snippet / Implementation</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <span className="study-note-label" style={{ marginBottom: 0 }}>Code Snippet / Implementation</span>
+                  <select
+                    value={form.codeSnippetLang}
+                    onChange={(e) => setForm((prev) => ({ ...prev, codeSnippetLang: e.target.value }))}
+                    style={{
+                      background: "rgba(255,255,255,0.08)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      color: "var(--text)",
+                      borderRadius: "6px",
+                      padding: "4px 10px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {SUPPORTED_LANGUAGES.map((lang) => (
+                      <option key={lang.value} value={lang.value}>{lang.label}</option>
+                    ))}
+                  </select>
+                </div>
                 <EditableCodeBlock
                   value={form.codeSnippet}
                   onChange={(val) => setForm((prev) => ({ ...prev, codeSnippet: val }))}
+                  language={form.codeSnippetLang}
                 />
               </div>
             </div>

@@ -99,7 +99,7 @@ export function NotesPreviewModal({
               <div className="notes-preview-section-body" style={{ padding: 0, overflow: 'hidden', borderRadius: '12px' }}>
                 <SyntaxCodeBlock
                   code={problem.codeSnippet ?? ""}
-                  language="cpp"
+                  language={problem.codeSnippetLang ?? "cpp"}
                   title="Implementation"
                 />
               </div>

@@ -38,6 +38,7 @@ export type Problem = {
   shortNote: string;
   longNote?: string;
   codeSnippet?: string;
+  codeSnippetLang?: string;
   mistakeLog?: string;
   mistakeTrigger?: string;
   mistakeReason?: string;
@@ -82,6 +83,7 @@ export type ProblemFormState = {
   shortNote: string;
   longNote: string;
   codeSnippet: string;
+  codeSnippetLang: string;
   mistakeLog: string;
   mistakeTrigger: string;
   mistakeReason: string;

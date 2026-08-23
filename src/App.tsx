@@ -107,6 +107,7 @@ const emptyForm: ProblemFormState = {
   shortNote: "",
   longNote: "",
   codeSnippet: "",
+  codeSnippetLang: "cpp",
   mistakeLog: "",
   mistakeTrigger: "",
   mistakeReason: "",
@@ -294,6 +295,7 @@ export default function App() {
   const [form, setForm] = useState<ProblemFormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [workspaceSaveState, setWorkspaceSaveState] = useState<WorkspaceSaveState>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [completingRevisionIds, setCompletingRevisionIds] = useState<Set<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
@@ -597,6 +599,7 @@ export default function App() {
       shortNote: problem.shortNote,
       longNote: problem.longNote ?? "",
       codeSnippet: problem.codeSnippet ?? "",
+      codeSnippetLang: problem.codeSnippetLang ?? "cpp",
       mistakeLog: problem.mistakeLog ?? composeMistakeLog(problem.mistakeTrigger ?? "", problem.mistakeReason ?? "", problem.mistakeFix ?? ""),
       mistakeTrigger: problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger,
       mistakeReason: problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason,
@@ -968,6 +971,7 @@ export default function App() {
       form.shortNote !== (activeProblem.shortNote ?? "") ||
       form.longNote !== (activeProblem.longNote ?? "") ||
       form.codeSnippet !== (activeProblem.codeSnippet ?? "") ||
+      form.codeSnippetLang !== (activeProblem.codeSnippetLang ?? "cpp") ||
       form.mistakeTrigger !== baselineTrigger ||
       form.mistakeReason !== baselineReason ||
       form.mistakeFix !== baselineFix
@@ -975,6 +979,8 @@ export default function App() {
   }, [
     activeProblem,
     drawerOpen,
+    form.codeSnippet,
+    form.codeSnippetLang,
     form.compareOptimized,
     form.compareWhyBetter,
     form.longNote,
@@ -1185,6 +1191,7 @@ export default function App() {
         shortNote: form.shortNote,
         longNote: form.longNote,
         codeSnippet: form.codeSnippet,
+        codeSnippetLang: form.codeSnippetLang,
         mistakeTrigger: form.mistakeTrigger,
         mistakeReason: form.mistakeReason,
         mistakeFix: form.mistakeFix,
@@ -1235,6 +1242,7 @@ export default function App() {
         void loadData({ silent: true });
       }
       setWorkspaceSaveState("saved");
+      setLastSavedAt(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save problem");
       setWorkspaceSaveState("error");
@@ -1304,6 +1312,7 @@ export default function App() {
     activeProblem,
     drawerOpen,
     form.codeSnippet,
+    form.codeSnippetLang,
     form.compareOptimized,
     form.compareWhyBetter,
     form.longNote,
@@ -2183,6 +2192,7 @@ export default function App() {
             form={form}
             setForm={setForm}
             workspaceSaveState={workspaceSaveState}
+            lastSavedAt={lastSavedAt}
             activeWorkspaceIndex={activeWorkspaceIndex}
             workspaceProblemIds={workspaceProblemIds}
             previousWorkspaceProblem={previousWorkspaceProblem}

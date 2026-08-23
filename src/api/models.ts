@@ -39,6 +39,7 @@ const problemSchema = new mongoose.Schema(
     shortNote: { type: String, default: "" },
     longNote: { type: String, default: "" },
     codeSnippet: { type: String, default: "" },
+    codeSnippetLang: { type: String, default: "cpp" },
     mistakeLog: { type: String, default: "" },
     mistakeTrigger: { type: String, default: "" },
     mistakeReason: { type: String, default: "" },

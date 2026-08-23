@@ -21,6 +21,10 @@ export function GeneralNoteModal({ isOpen, note, onClose, onSave }: GeneralNoteM
   const [codeSnippets, setCodeSnippets] = useState<CodeSnippetItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [isDirty, setIsDirty] = useState(false);
+
+  // snapshot of state when modal opened — used for dirty detection
+  const snapshotRef = React.useRef("");
 
   useEffect(() => {
     if (note) {
@@ -48,7 +52,38 @@ export function GeneralNoteModal({ isOpen, note, onClose, onSave }: GeneralNoteM
       setCodeSnippets([]);
     }
     setError("");
+    setIsDirty(false);
+    // Save a snapshot right after setting state
+    setTimeout(() => {
+      snapshotRef.current = JSON.stringify({
+        title: note?.title ?? "",
+        category: note?.category ?? "Algorithmic Patterns",
+        importance: note?.importance ?? "Important",
+        summary: note?.summary ?? "",
+        content: note?.content ?? "",
+        tagsInput: note?.tags ? note.tags.join(", ") : "",
+        isPinned: Boolean(note?.isPinned),
+        keyTakeaways: note?.keyTakeaways && note.keyTakeaways.length > 0 ? note.keyTakeaways : [""],
+        mistakesToAvoid: note?.mistakesToAvoid ?? [],
+        codeSnippets: note?.codeSnippets ?? [],
+      });
+    }, 0);
   }, [note, isOpen]);
+
+  // Track dirty state whenever any field changes
+  useEffect(() => {
+    const current = JSON.stringify({ title, category, importance, summary, content, tagsInput, isPinned, keyTakeaways, mistakesToAvoid, codeSnippets });
+    setIsDirty(current !== snapshotRef.current);
+  }, [title, category, importance, summary, content, tagsInput, isPinned, keyTakeaways, mistakesToAvoid, codeSnippets]);
+
+  const handleClose = () => {
+    if (isDirty && !saving) {
+      if (!window.confirm("You have unsaved changes. Are you sure you want to close? Your changes will be lost.")) {
+        return;
+      }
+    }
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -143,11 +178,11 @@ export function GeneralNoteModal({ isOpen, note, onClose, onSave }: GeneralNoteM
   };
 
   return (
-    <div className="gnote-modal-backdrop" onClick={onClose}>
+    <div className="gnote-modal-backdrop" onClick={handleClose}>
       <div className="gnote-modal-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="gnote-modal-header">
           <h3>{note ? "✏️ Edit General Note" : "📓 Create General Note"}</h3>
-          <button type="button" className="gnote-modal-close" onClick={onClose}>
+          <button type="button" className="gnote-modal-close" onClick={handleClose}>
             ✕
           </button>
         </div>
