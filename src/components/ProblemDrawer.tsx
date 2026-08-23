@@ -1,5 +1,6 @@
 import type { Difficulty, Problem, ProblemFormState, RevisionState, Status, Topic } from "../appTypes";
 import { ProblemPrerequisitesSection } from "./PrerequisitesSections";
+import { EditableCodeBlock } from "./EditableCodeBlock";
 
 export type ProblemDrawerProps = {
   isOpen: boolean;
@@ -257,16 +258,14 @@ export function ProblemDrawer({
                 />
               </label>
 
-              <label>
-                Code Snippet / Implementation
-                <textarea
-                  rows={8}
-                  style={{ fontFamily: "monospace" }}
+              <div>
+                <span className="study-note-label">Code Snippet / Implementation</span>
+                <EditableCodeBlock
                   value={form.codeSnippet}
-                  onChange={(event) => setForm((prev) => ({ ...prev, codeSnippet: event.target.value }))}
-                  placeholder="Paste your core implementation code here..."
+                  onChange={(val) => setForm((prev) => ({ ...prev, codeSnippet: val }))}
+                  minHeight={150}
                 />
-              </label>
+              </div>
 
               <div className="mistake-log-block">
                 <p className="panel-label">Mistake log</p>
@@ -403,16 +402,14 @@ export function ProblemDrawer({
                 />
               </label>
 
-              <label>
-                Code Snippet / Implementation
-                <textarea
-                  rows={10}
-                  style={{ fontFamily: "monospace" }}
+              <div>
+                <span className="study-note-label">Code Snippet / Implementation</span>
+                <EditableCodeBlock
                   value={form.codeSnippet}
-                  onChange={(event) => setForm((prev) => ({ ...prev, codeSnippet: event.target.value }))}
-                  placeholder="Paste your core implementation code here..."
+                  onChange={(val) => setForm((prev) => ({ ...prev, codeSnippet: val }))}
+                  minHeight={150}
                 />
-              </label>
+              </div>
 
               <div className="mistake-log-block">
                 <p className="panel-label">Mistake log</p>

@@ -261,6 +261,7 @@ export function hasNoteContent(problem: Problem | null | undefined): boolean {
   return Boolean(
     (problem.shortNote && problem.shortNote.trim().length > 0) ||
     (problem.longNote && problem.longNote.trim().length > 0) ||
+    (problem.codeSnippet && problem.codeSnippet.trim().length > 0) ||
     (problem.mistakeLog && problem.mistakeLog.trim().length > 0) ||
     (trigger && trigger.trim().length > 0) ||
     (reason && reason.trim().length > 0) ||

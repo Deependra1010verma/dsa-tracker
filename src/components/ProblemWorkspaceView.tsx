@@ -1,6 +1,7 @@
 import type { Problem, ProblemFormState, RevisionState } from "../appTypes";
 import { PatternFamilySection, ProblemPrerequisitesSection } from "./PrerequisitesSections";
 import { ActiveRecallPanel, SectionBadge } from "./StatCards";
+import { EditableCodeBlock } from "./EditableCodeBlock";
 
 export type ProblemWorkspaceViewProps = {
   activeProblem: Problem;
@@ -139,16 +140,13 @@ export function ProblemWorkspaceView({
                   placeholder="Write the explanation, key insight, or edge cases here"
                 />
               </label>
-              <label className="workspace-editor-field" style={{ gridColumn: "1 / -1" }}>
+              <div className="workspace-editor-field" style={{ gridColumn: "1 / -1" }}>
                 <span className="study-note-label">Code Snippet / Implementation</span>
-                <textarea
-                  rows={8}
-                  style={{ fontFamily: "monospace" }}
+                <EditableCodeBlock
                   value={form.codeSnippet}
-                  onChange={(event) => setForm((prev) => ({ ...prev, codeSnippet: event.target.value }))}
-                  placeholder="Paste your core implementation code here..."
+                  onChange={(val) => setForm((prev) => ({ ...prev, codeSnippet: val }))}
                 />
-              </label>
+              </div>
             </div>
           </section>
 

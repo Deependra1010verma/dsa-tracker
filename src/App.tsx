@@ -557,7 +557,7 @@ export default function App() {
   }, []);
 
   const hydrateProblemDetails = useCallback(async (problem: Problem) => {
-    if (problem.longNote !== undefined && problem.tags.length > 0) {
+    if (problem.longNote !== undefined && problem.codeSnippet !== undefined && problem.tags.length > 0) {
       return problem;
     }
 
@@ -1173,6 +1173,7 @@ export default function App() {
         rating: form.rating,
         shortNote: form.shortNote,
         longNote: form.longNote,
+        codeSnippet: form.codeSnippet,
         mistakeTrigger: form.mistakeTrigger,
         mistakeReason: form.mistakeReason,
         mistakeFix: form.mistakeFix,
@@ -1254,6 +1255,7 @@ export default function App() {
       form.compareWhyBetter !== (activeProblem.compareWhyBetter ?? "") ||
       form.shortNote !== baselineShortNote ||
       form.longNote !== baselineLongNote ||
+      form.codeSnippet !== (activeProblem.codeSnippet ?? "") ||
       form.mistakeTrigger !== baselineTrigger ||
       form.mistakeReason !== baselineReason ||
       form.mistakeFix !== baselineFix ||
@@ -1287,6 +1289,7 @@ export default function App() {
   }, [
     activeProblem,
     drawerOpen,
+    form.codeSnippet,
     form.compareOptimized,
     form.compareWhyBetter,
     form.longNote,

@@ -1,0 +1,56 @@
+.editable-code-block-container {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.editable-code-preview,
+.editable-code-textarea {
+  /* Must match exactly for perfect overlap */
+  margin: 0 !important;
+  border: 0 !important;
+  padding: 16px !important;
+  width: 100% !important;
+  height: 100% !important;
+  box-sizing: border-box !important;
+  font-family: 'Fira Code', 'Courier New', Courier, monospace !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  tab-size: 2 !important;
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+}
+
+.editable-code-preview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background: transparent !important;
+  overflow: hidden !important;
+  z-index: 1;
+}
+
+.editable-code-textarea {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: transparent !important;
+  background: transparent !important;
+  caret-color: var(--text) !important;
+  resize: vertical !important;
+  z-index: 2;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.editable-code-textarea::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.editable-code-inner {
+  font-family: inherit !important;
+}
