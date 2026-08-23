@@ -524,7 +524,9 @@ function CenteredInspectModal({
           {note.content ? (
             <section className="vmodal-section">
               <h4 className="vmodal-section-title">📜 Detailed Breakdown</h4>
-              <div className="vmodal-content-box">{note.content}</div>
+              <div className="vmodal-content-box" style={{ whiteSpace: 'pre-wrap' }}>
+                {note.content}
+              </div>
             </section>
           ) : null}
 

@@ -37,6 +37,7 @@ export type Problem = {
   rating?: number;
   shortNote: string;
   longNote?: string;
+  codeSnippet?: string;
   mistakeLog?: string;
   mistakeTrigger?: string;
   mistakeReason?: string;
@@ -80,6 +81,7 @@ export type ProblemFormState = {
   rating: number;
   shortNote: string;
   longNote: string;
+  codeSnippet: string;
   mistakeLog: string;
   mistakeTrigger: string;
   mistakeReason: string;

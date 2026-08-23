@@ -210,11 +210,11 @@ export function GeneralNoteModal({ isOpen, note, onClose, onSave }: GeneralNoteM
           </div>
 
           <div className="form-group">
-            <label>Detailed Notes / Explanation (Markdown)</label>
+            <label>Detailed Notes / Explanation</label>
             <textarea
               className="gnote-form-textarea"
-              rows={4}
               placeholder="Write core principles, contracts, time/space complexity analysis..."
+              rows={6}
               value={content}
               onChange={(e) => setContent(e.target.value)}
             />

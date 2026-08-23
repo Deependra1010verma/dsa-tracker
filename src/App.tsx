@@ -106,6 +106,7 @@ const emptyForm: ProblemFormState = {
   rating: 0,
   shortNote: "",
   longNote: "",
+  codeSnippet: "",
   mistakeLog: "",
   mistakeTrigger: "",
   mistakeReason: "",
@@ -584,6 +585,7 @@ export default function App() {
       rating: problem.rating ?? 0,
       shortNote: problem.shortNote,
       longNote: problem.longNote ?? "",
+      codeSnippet: problem.codeSnippet ?? "",
       mistakeLog: problem.mistakeLog ?? composeMistakeLog(problem.mistakeTrigger ?? "", problem.mistakeReason ?? "", problem.mistakeFix ?? ""),
       mistakeTrigger: problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger,
       mistakeReason: problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason,
@@ -954,6 +956,7 @@ export default function App() {
       form.compareWhyBetter !== (activeProblem.compareWhyBetter ?? "") ||
       form.shortNote !== (activeProblem.shortNote ?? "") ||
       form.longNote !== (activeProblem.longNote ?? "") ||
+      form.codeSnippet !== (activeProblem.codeSnippet ?? "") ||
       form.mistakeTrigger !== baselineTrigger ||
       form.mistakeReason !== baselineReason ||
       form.mistakeFix !== baselineFix

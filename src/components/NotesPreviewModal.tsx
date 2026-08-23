@@ -1,5 +1,6 @@
 import type { Problem } from "../appTypes";
 import { formatRating, splitMistakeLog } from "../utils/problemUtils";
+import { SyntaxCodeBlock } from "./SyntaxCodeBlock";
 
 export type NotesPreviewModalProps = {
   problem: Problem | null;
@@ -33,13 +34,7 @@ export function NotesPreviewModal({
   const hasWhyBetter = Boolean(problem.compareWhyBetter?.trim());
   const hasComparison = hasBrute || hasOptimized || hasWhyBetter;
 
-  const renderNoteBody = (content: string) => {
-    const containsHtml = /<[a-z][\s\S]*>/i.test(content);
-    if (containsHtml) {
-      return <div className="notes-preview-html-content" dangerouslySetInnerHTML={{ __html: content }} />;
-    }
-    return <div className="notes-preview-text-content">{content}</div>;
-  };
+  const hasCodeSnippet = Boolean(problem.codeSnippet?.trim());
 
   return (
     <div className="notes-preview-modal-backdrop" onClick={onClose}>
@@ -89,8 +84,24 @@ export function NotesPreviewModal({
               <div className="notes-preview-section-title">
                 <span className="section-title-icon">📝</span> Solution & Notes
               </div>
-              <div className="notes-preview-section-body">
-                {renderNoteBody(problem.longNote ?? "")}
+              <div className="notes-preview-section-body" style={{ whiteSpace: 'pre-wrap', color: 'var(--text)', fontSize: '14px', lineHeight: '1.6' }}>
+                {problem.longNote}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Code Snippet */}
+          {hasCodeSnippet ? (
+            <div className="notes-preview-section">
+              <div className="notes-preview-section-title">
+                <span className="section-title-icon">💻</span> Code Snippet
+              </div>
+              <div className="notes-preview-section-body" style={{ padding: 0, overflow: 'hidden', borderRadius: '12px' }}>
+                <SyntaxCodeBlock
+                  code={problem.codeSnippet ?? ""}
+                  language="cpp"
+                  title="Implementation"
+                />
               </div>
             </div>
           ) : null}

@@ -257,6 +257,17 @@ export function ProblemDrawer({
                 />
               </label>
 
+              <label>
+                Code Snippet / Implementation
+                <textarea
+                  rows={8}
+                  style={{ fontFamily: "monospace" }}
+                  value={form.codeSnippet}
+                  onChange={(event) => setForm((prev) => ({ ...prev, codeSnippet: event.target.value }))}
+                  placeholder="Paste your core implementation code here..."
+                />
+              </label>
+
               <div className="mistake-log-block">
                 <p className="panel-label">Mistake log</p>
                 <label>
@@ -389,6 +400,17 @@ export function ProblemDrawer({
                   value={form.longNote}
                   onChange={(event) => setForm((prev) => ({ ...prev, longNote: event.target.value }))}
                   placeholder="What you learned"
+                />
+              </label>
+
+              <label>
+                Code Snippet / Implementation
+                <textarea
+                  rows={10}
+                  style={{ fontFamily: "monospace" }}
+                  value={form.codeSnippet}
+                  onChange={(event) => setForm((prev) => ({ ...prev, codeSnippet: event.target.value }))}
+                  placeholder="Paste your core implementation code here..."
                 />
               </label>
 

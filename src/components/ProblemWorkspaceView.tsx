@@ -130,13 +130,23 @@ export function ProblemWorkspaceView({
                   placeholder="One-line takeaway"
                 />
               </label>
-              <label className="workspace-editor-field">
+              <label className="workspace-editor-field" style={{ gridColumn: "1 / -1" }}>
                 <span className="study-note-label">Detailed notes</span>
                 <textarea
                   rows={7}
                   value={form.longNote}
                   onChange={(event) => setForm((prev) => ({ ...prev, longNote: event.target.value }))}
                   placeholder="Write the explanation, key insight, or edge cases here"
+                />
+              </label>
+              <label className="workspace-editor-field" style={{ gridColumn: "1 / -1" }}>
+                <span className="study-note-label">Code Snippet / Implementation</span>
+                <textarea
+                  rows={8}
+                  style={{ fontFamily: "monospace" }}
+                  value={form.codeSnippet}
+                  onChange={(event) => setForm((prev) => ({ ...prev, codeSnippet: event.target.value }))}
+                  placeholder="Paste your core implementation code here..."
                 />
               </label>
             </div>
