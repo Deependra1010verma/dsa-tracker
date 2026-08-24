@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { GeneralNote, CodeSnippetItem, MistakeItem } from "../api/types";
 import { SyntaxCodeBlock } from "./SyntaxCodeBlock";
 
@@ -486,6 +486,14 @@ function CenteredInspectModal({
   copiedSnippetId: string | null;
   getCategoryIcon: (cat: string) => string;
 }) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
     <div className="vmodal-backdrop" onClick={onClose}>
       <aside className="vmodal-panel" onClick={(e) => e.stopPropagation()}>

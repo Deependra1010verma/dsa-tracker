@@ -367,7 +367,12 @@ export default function App() {
   const stats = useMemo(() => {
     const totalProblems = problems.length;
     const solvedProblems = problems.filter((problem) => problem.status === "solved").length;
-    const revisitProblems = problems.filter((problem) => problem.status === "revisit").length;
+    // revisitProblems = isPinned (starred) problems. Shown in "Revision" stat card.
+    // Star click → isPinned toggles → this count updates instantly.
+    const revisitProblems = problems.filter((problem) => problem.isPinned).length;
+    // revisitStatusCount = problems explicitly set to status "revisit".
+    // Shown in sidebar "Revisit" button — separate concept from starred/revision.
+    const revisitStatusCount = problems.filter((problem) => problem.status === "revisit").length;
     const unsolvedProblems = problems.filter((problem) => problem.status === "unsolved").length;
     const skippedProblems = problems.filter((problem) => problem.status === "skipped").length;
 
@@ -375,6 +380,7 @@ export default function App() {
       totalProblems,
       solvedProblems,
       revisitProblems,
+      revisitStatusCount,
       unsolvedProblems,
       skippedProblems,
     };
@@ -389,7 +395,7 @@ export default function App() {
     return {
       totalProblems: topicProblems.length,
       solvedProblems: topicProblems.filter((problem) => problem.status === "solved").length,
-      revisitProblems: topicProblems.filter((problem) => problem.status === "revisit").length,
+      revisitProblems: topicProblems.filter((problem) => problem.isPinned).length,
       unsolvedProblems: topicProblems.filter((problem) => problem.status === "unsolved").length,
       skippedProblems: topicProblems.filter((problem) => problem.status === "skipped").length,
     };
@@ -422,6 +428,24 @@ export default function App() {
     () => new Map(problems.map((problem) => [problem._id, problem])),
     [problems]
   );
+
+  // Compute per-topic solved/revisit/total counts directly from the live problems state.
+  // This is the ONLY source of truth for sidebar counts — using topic.solvedCount
+  // from the server aggregation causes inconsistency because local-progress overrides
+  // are applied to problems[] but not reflected in the stale topics[] from the API.
+  const topicStatsMap = useMemo(() => {
+    const map = new Map<string, { solved: number; revisit: number; total: number }>();
+    for (const problem of problems) {
+      const topicId = problem.topic._id;
+      const entry = map.get(topicId) ?? { solved: 0, revisit: 0, total: 0 };
+      entry.total += 1;
+      if (problem.status === "solved") entry.solved += 1;
+      // Use isPinned (starred) for revisit count — matches what the Revisit filter shows.
+      if (problem.isPinned) entry.revisit += 1;
+      map.set(topicId, entry);
+    }
+    return map;
+  }, [problems]);
 
   const revisionStateMap = useMemo(() => {
     const map = new Map<string, RevisionState>();
@@ -633,7 +657,10 @@ export default function App() {
       setPreviewNoteProblem(problem);
       void hydrateProblemDetails(problem).then((nextProblem) => {
         if (hasNoteContent(nextProblem)) {
-          setPreviewNoteProblem(nextProblem);
+          // Only update if the preview is still open.
+          // If the user clicked "Open Full Workspace" before hydration finished,
+          // previewNoteProblem will already be null — don't re-open it.
+          setPreviewNoteProblem((current) => (current !== null ? nextProblem : null));
         }
       }).catch(() => {});
     } else {
@@ -1041,14 +1068,13 @@ export default function App() {
   }, [nowDate, revisionProblems, revisionStateMap]);
 
   const revisedTodayProblems = useMemo(() => {
-    const problemsById = new Map(problems.map((problem) => [problem._id, problem]));
     const todayKey = toDateKey(nowDate);
     const seenTitles = new Set<string>();
 
     return activities
       .filter((activity) => activity.kind === "revision" && toDateKey(new Date(activity.occurredAt)) === todayKey)
       .sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime())
-      .map((activity) => problemsById.get(activity.problem._id))
+      .map((activity) => problemLookup.get(activity.problem._id))
       .filter((problem): problem is Problem => Boolean(problem))
       .filter((problem) => {
         const normalizedTitle = problem.title.trim().toLowerCase();
@@ -1059,7 +1085,7 @@ export default function App() {
         return true;
       })
       .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }));
-  }, [activities, nowDate, problems, revisionStateMap]);
+  }, [activities, nowDate, problemLookup, revisionStateMap]);
 
   const filteredDueRevisionProblems = useMemo(() => {
     const query = revisionSearch.trim().toLowerCase();
@@ -1102,7 +1128,7 @@ export default function App() {
 
   const nextRevisionCandidate = dueRevisionProblems[0]?.problem ?? sidebarRevisionProblems[0]?.problem ?? null;
   const showRevisionDashboard =
-    statusFilter === "revisit" && (revisionProblems.length > 0 || revisedTodayProblems.length > 0);
+    selectedTopic === "revision" && (revisionProblems.length > 0 || revisedTodayProblems.length > 0);
 
   const toggleTopicExpanded = useCallback((topicId: string) => {
     setExpandedTopics((prev) => {
@@ -1484,6 +1510,8 @@ export default function App() {
       removeLocalProgressItem(problemId);
 
       await api(`/api/problems/${problemId}`, { method: "DELETE" });
+      // Only remove from UI after confirmed server deletion.
+      // Removing before the await would permanently lose the problem on network failure.
       removeProblem(problemId);
       if (activeProblem?._id === problemId) {
         setDrawerOpen(false);
@@ -1678,15 +1706,19 @@ export default function App() {
         </button>
 
         <button
-          className={`topic-card ${statusFilter === "revisit" && selectedTopic !== "general_notes" ? "active" : ""}`}
-          onClick={() => focusTopicList("all", "revisit")}
+          className={`topic-card ${selectedTopic === "revision" ? "active" : ""}`}
+          onClick={() => {
+            setSelectedTopic("revision");
+            setStatusFilter("revisit");
+            setMobileSidebarOpen(false);
+          }}
         >
           <div className="topic-dot revision-dot" />
           <div className="topic-copy">
-            <span className="topic-name">Revisit</span>
-            <span className="topic-subtitle">{revisionProblems.length} scheduled</span>
+            <span className="topic-name">Revision</span>
+            <span className="topic-subtitle">{dueRevisionProblems.length} due today</span>
           </div>
-          <span className="topic-count">{revisionProblems.length}</span>
+          <span className="topic-count">{dueRevisionProblems.length}</span>
         </button>
 
         <button
@@ -1712,10 +1744,9 @@ export default function App() {
 
 
         <div className="topic-list">
-          {topics.map((topic) => {
+        {topics.map((topic) => {
             const active = selectedTopic === topic._id;
-            const solved = topic.solvedCount ?? 0;
-            const total = topic.totalProblems ?? 0;
+            const liveStats = topicStatsMap.get(topic._id) ?? { solved: 0, revisit: 0, total: 0 };
             const slug = topic.slug;
             const subCategories = topicSubCategories[slug] ?? [];
             return (
@@ -1728,7 +1759,7 @@ export default function App() {
                   <div className="topic-copy">
                     <span className="topic-name">{topic.name}</span>
                     <span className="topic-subtitle">
-                      {solved}/{total || topic.targetCount} done
+                      {liveStats.solved}/{liveStats.total || topic.targetCount} done
                     </span>
                   </div>
                   <span className="topic-count">{topic.targetCount}</span>
@@ -1808,21 +1839,29 @@ export default function App() {
             label="Total"
             value={visibleStats?.totalProblems ?? 0}
             hint={selectedTopic === "all" ? "All records" : "Topic records"}
+            onClick={() => setStatusFilter("all")}
+            isActive={statusFilter === "all"}
           />
           <StatCard
             label="Solved"
             value={visibleStats?.solvedProblems ?? 0}
             hint={`${visibleProgress}% complete`}
+            onClick={() => setStatusFilter("solved")}
+            isActive={statusFilter === "solved"}
           />
           <StatCard
             label="Revisit"
             value={visibleStats?.revisitProblems ?? 0}
-            hint={selectedTopic === "all" ? "Needs another pass" : "Topic revisit"}
+            hint={selectedTopic === "all" ? "Starred for revisit" : "Topic starred"}
+            onClick={() => setStatusFilter("revisit")}
+            isActive={statusFilter === "revisit"}
           />
           <StatCard
             label="Unsolved"
             value={visibleStats?.unsolvedProblems ?? 0}
             hint={selectedTopic === "all" ? "Still pending" : "Topic pending"}
+            onClick={() => setStatusFilter("unsolved")}
+            isActive={statusFilter === "unsolved"}
           />
         </section>
 
@@ -1843,7 +1882,7 @@ export default function App() {
           </section>
         ) : null}
 
-        {statusFilter === "revisit" ? (
+        {selectedTopic === "revision" ? (
           <div className="revisit-subtabs-bar">
             <div className="revisit-segmented-control">
               <button
@@ -1920,7 +1959,7 @@ export default function App() {
           </div>
         ) : null}
 
-        {statusFilter === "revisit" && (revisitSubTab === "heatmap" || revisitSubTab === "all") ? (
+        {selectedTopic === "revision" && (revisitSubTab === "heatmap" || revisitSubTab === "all") ? (
           <ActivityInsightsPanel
             insights={activityInsights}
             scopeLabel={selectedTopicData?.name ?? "All topics"}
@@ -1939,7 +1978,7 @@ export default function App() {
           />
         ) : null}
 
-        {statusFilter === "revisit" && (revisitSubTab === "queue" || revisitSubTab === "all") && showRevisionDashboard ? (
+        {selectedTopic === "revision" && (revisitSubTab === "queue" || revisitSubTab === "all") && showRevisionDashboard ? (
           <section className="revision-panel revision-dashboard">
             <div className="revision-dashboard-head">
               <div>
@@ -2227,13 +2266,6 @@ export default function App() {
             <option value="title">🔤 Title (A-Z)</option>
           </select>
 
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as Status | "all" | "revisit")}>
-            <option value="all">All status</option>
-            <option value="unsolved">Unsolved</option>
-            <option value="solved">Solved</option>
-            <option value="revisit">Revisit</option>
-            <option value="skipped">Skipped</option>
-          </select>
 
           <select
             value={difficultyFilter}
@@ -2267,7 +2299,7 @@ export default function App() {
               <p className="panel-label">Problems</p>
               <h3>{filteredProblems.length} records</h3>
             </div>
-            <span className="section-note">{selectedTopicData ? selectedTopicData.name : "All"}</span>
+            <span className="section-note">{selectedTopicData ? selectedTopicData.name : selectedTopic === "revision" ? "Revision Queue" : "All"}</span>
           </div>
 
           {loading ? (
@@ -2292,7 +2324,7 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedTopic === "all"
+                  {selectedTopic === "all" || selectedTopic === "revision"
                     ? groupedByTopicAndSection.map((group) => {
                         const isExpanded = expandedTopics.has(group.topicId) || Boolean(deferredSearch.trim());
                         return (

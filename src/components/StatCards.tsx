@@ -2,7 +2,32 @@ import { memo, useMemo, useState } from "react";
 import type { Problem } from "../appTypes";
 import { buildRecallPrompts } from "../utils/problemUtils";
 
-export function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
+export function StatCard({
+  label,
+  value,
+  hint,
+  onClick,
+  isActive,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  onClick?: () => void;
+  isActive?: boolean;
+}) {
+  if (onClick) {
+    return (
+      <button
+        className={`stat-card stat-card-btn${isActive ? " stat-card-active" : ""}`}
+        onClick={onClick}
+        title={isActive ? `Showing ${label.toLowerCase()} problems` : `Filter by ${label.toLowerCase()}`}
+      >
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <p>{hint}</p>
+      </button>
+    );
+  }
   return (
     <article className="stat-card">
       <span>{label}</span>

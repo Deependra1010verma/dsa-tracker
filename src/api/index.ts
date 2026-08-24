@@ -1128,10 +1128,26 @@ async function backfillRevisionSchedules() {
     ],
   });
 
-  for (const problem of problems) {
+  if (problems.length === 0) return;
+
+  const writes = problems.map((problem) => {
     startRevisionSchedule(problem);
-    await problem.save();
-  }
+    return {
+      updateOne: {
+        filter: { _id: problem._id },
+        update: {
+          $set: {
+            lastRevisionAt: problem.lastRevisionAt,
+            nextRevisionAt: problem.nextRevisionAt,
+            revisionStage: problem.revisionStage,
+            revisionCount: problem.revisionCount,
+          },
+        },
+      },
+    };
+  });
+
+  await Problem.bulkWrite(writes);
 }
 
 async function ensureActivityHistory() {

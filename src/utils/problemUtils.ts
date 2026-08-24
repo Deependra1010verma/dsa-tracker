@@ -254,18 +254,19 @@ export function getProblemCategories(problem: Problem): string[] {
 
 export function hasNoteContent(problem: Problem | null | undefined): boolean {
   if (!problem) return false;
-  const trigger = problem.mistakeTrigger ?? splitMistakeLog(problem.mistakeLog).trigger;
-  const reason = problem.mistakeReason ?? splitMistakeLog(problem.mistakeLog).reason;
-  const fix = problem.mistakeFix ?? splitMistakeLog(problem.mistakeLog).fix;
+  const { trigger, reason, fix } = splitMistakeLog(problem.mistakeLog);
+  const resolvedTrigger = problem.mistakeTrigger ?? trigger;
+  const resolvedReason = problem.mistakeReason ?? reason;
+  const resolvedFix = problem.mistakeFix ?? fix;
 
   return Boolean(
     (problem.shortNote && problem.shortNote.trim().length > 0) ||
     (problem.longNote && problem.longNote.trim().length > 0) ||
     (problem.codeSnippet && problem.codeSnippet.trim().length > 0) ||
     (problem.mistakeLog && problem.mistakeLog.trim().length > 0) ||
-    (trigger && trigger.trim().length > 0) ||
-    (reason && reason.trim().length > 0) ||
-    (fix && fix.trim().length > 0) ||
+    (resolvedTrigger && resolvedTrigger.trim().length > 0) ||
+    (resolvedReason && resolvedReason.trim().length > 0) ||
+    (resolvedFix && resolvedFix.trim().length > 0) ||
     (problem.compareBruteForce && problem.compareBruteForce.trim().length > 0) ||
     (problem.compareOptimized && problem.compareOptimized.trim().length > 0) ||
     (problem.compareWhyBetter && problem.compareWhyBetter.trim().length > 0)
