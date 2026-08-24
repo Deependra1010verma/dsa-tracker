@@ -312,29 +312,6 @@ export default function App() {
     }
   };
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
-  const [isFocusMode, setIsFocusMode] = useState<boolean>(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    return window.localStorage.getItem("dsa_focus_mode") === "true";
-  });
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("dsa_focus_mode", String(isFocusMode));
-    }
-  }, [isFocusMode]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey && (e.key === "f" || e.key === "F")) {
-        e.preventDefault();
-        setIsFocusMode((prev) => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
 
   // Warn user before closing tab if there are unsaved workspace changes
   useEffect(() => {
@@ -1620,7 +1597,7 @@ export default function App() {
   );
 
   const dashboardView = (
-    <div className={`app-shell ${isFocusMode ? "focus-mode" : ""}`}>
+    <div className="app-shell focus-mode">
       {/* Sticky Mobile Top Bar */}
       <header className="mobile-header">
         <button className="menu-btn" onClick={() => setMobileSidebarOpen(true)} aria-label="Open menu">
@@ -1632,13 +1609,6 @@ export default function App() {
         </button>
         <span className="mobile-title">DSA Tracker</span>
         <div className="mobile-header-actions">
-          <button
-            className={`icon-btn ${isFocusMode ? "active" : ""}`}
-            onClick={() => setIsFocusMode((prev) => !prev)}
-            title="Toggle Focus Mode (Alt+F)"
-          >
-            🎯
-          </button>
           <button className="icon-btn" onClick={() => void loadData()} title="Refresh">
             <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
               <path d="M23 4v6h-6M1 20v-6h6"></path>
@@ -1789,13 +1759,6 @@ export default function App() {
           </div>
 
           <div className="hero-actions">
-            <button
-              className={`secondary-btn focus-toggle-btn ${isFocusMode ? "active" : ""}`}
-              onClick={() => setIsFocusMode((value) => !value)}
-              title="Toggle Focus Mode (Alt+F)"
-            >
-              {isFocusMode ? "✨ Focus ON" : "🎯 Focus Mode"}
-            </button>
             <button className="primary-btn" onClick={() => openAddDrawer()}>
               Add
             </button>
@@ -1830,7 +1793,7 @@ export default function App() {
             }}
             onDeleteNote={handleDeleteGeneralNote}
             onTogglePinNote={handleTogglePinGeneralNote}
-            isFocusMode={isFocusMode}
+            isFocusMode={true}
           />
         ) : (
           <>
@@ -1846,21 +1809,21 @@ export default function App() {
             label="Solved"
             value={visibleStats?.solvedProblems ?? 0}
             hint={`${visibleProgress}% complete`}
-            onClick={() => setStatusFilter("solved")}
+            onClick={() => setStatusFilter((prev) => (prev === "solved" ? "all" : "solved"))}
             isActive={statusFilter === "solved"}
           />
           <StatCard
             label="Revisit"
             value={visibleStats?.revisitProblems ?? 0}
             hint={selectedTopic === "all" ? "Starred for revisit" : "Topic starred"}
-            onClick={() => setStatusFilter("revisit")}
+            onClick={() => setStatusFilter((prev) => (prev === "revisit" ? "all" : "revisit"))}
             isActive={statusFilter === "revisit"}
           />
           <StatCard
             label="Unsolved"
             value={visibleStats?.unsolvedProblems ?? 0}
             hint={selectedTopic === "all" ? "Still pending" : "Topic pending"}
-            onClick={() => setStatusFilter("unsolved")}
+            onClick={() => setStatusFilter((prev) => (prev === "unsolved" ? "all" : "unsolved"))}
             isActive={statusFilter === "unsolved"}
           />
         </section>
