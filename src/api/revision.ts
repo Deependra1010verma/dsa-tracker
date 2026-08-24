@@ -39,31 +39,39 @@ export function baseRevisionAnchor(problem: RevisionScheduleShape) {
   );
 }
 
-export function initializeRevisionSchedule(problem: RevisionScheduleShape, anchorOverride?: Date) {
+export function initializeRevisionSchedule(
+  problem: RevisionScheduleShape,
+  anchorOverride?: Date,
+  intervals: number[] = revisionIntervalsDays
+) {
   const anchor = anchorOverride ?? baseRevisionAnchor(problem);
   problem.revisionStage = 0;
   problem.revisionCount = 0;
   problem.lastRevisionAt = anchor;
-  problem.nextRevisionAt = addDays(anchor, revisionIntervalsDays[0] ?? 1);
+  problem.nextRevisionAt = addDays(anchor, intervals[0] ?? 1);
   problem.revisionCompletedAt = undefined;
 }
 
-export function advanceRevisionSchedule(problem: RevisionScheduleShape, completedAt = new Date()) {
+export function advanceRevisionSchedule(
+  problem: RevisionScheduleShape,
+  completedAt = new Date(),
+  intervals: number[] = revisionIntervalsDays
+) {
   const currentStage = Math.max(problem.revisionStage ?? 0, 0);
   const nextStage = currentStage + 1;
 
   problem.revisionCount = Math.max(problem.revisionCount ?? 0, 0) + 1;
   problem.lastRevisionAt = completedAt;
 
-  if (nextStage >= revisionIntervalsDays.length) {
-    problem.revisionStage = revisionIntervalsDays.length;
+  if (nextStage >= intervals.length) {
+    problem.revisionStage = intervals.length;
     problem.nextRevisionAt = undefined;
     problem.revisionCompletedAt = completedAt;
     return;
   }
 
   problem.revisionStage = nextStage;
-  problem.nextRevisionAt = addDays(completedAt, revisionIntervalsDays[nextStage] ?? 1);
+  problem.nextRevisionAt = addDays(completedAt, intervals[nextStage] ?? 1);
   problem.revisionCompletedAt = undefined;
 }
 

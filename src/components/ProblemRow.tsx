@@ -49,17 +49,14 @@ export const ProblemRow = memo(function ProblemRow({
           </button>
         </div>
       </td>
-      <td className="problem-title-col" onClick={() => onOpenLink(problem)}>
+      <td className="problem-title-col">
         <div className="problem-title-wrapper">
           <a
             href={problem.platformUrl}
             target="_blank"
             rel="noreferrer"
             className="problem-title-text"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenLink(problem);
-            }}
+            onClick={(event) => event.stopPropagation()}
             title={`Open ${problem.title} on ${problem.platformName}`}
           >
             {problem.title}

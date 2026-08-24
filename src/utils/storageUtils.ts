@@ -253,6 +253,26 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30_000); // 30s timeout
 
+  // Merge the caller's signal with the internal timeout signal so both are honoured.
+  // AbortSignal.any() is well-supported in modern browsers but we fall back for safety.
+  let signal: AbortSignal;
+  if (init?.signal) {
+    if (typeof AbortSignal.any === "function") {
+      signal = AbortSignal.any([init.signal, controller.signal]);
+    } else {
+      // Manual fallback: abort the internal controller when the caller's signal fires.
+      const callerSignal = init.signal;
+      if (callerSignal.aborted) {
+        controller.abort();
+      } else {
+        callerSignal.addEventListener("abort", () => controller.abort(), { once: true });
+      }
+      signal = controller.signal;
+    }
+  } else {
+    signal = controller.signal;
+  }
+
   try {
     const response = await fetch(path, {
       headers: {
@@ -260,7 +280,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
         ...(init?.headers ?? {}),
       },
       ...init,
-      signal: init?.signal ?? controller.signal,
+      signal,
     });
 
     if (!response.ok) {

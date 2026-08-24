@@ -396,7 +396,7 @@ export function GeneralNoteModal({ isOpen, note, onClose, onSave }: GeneralNoteM
 
           {/* Form Actions */}
           <div className="gnote-modal-footer">
-            <button type="button" className="secondary-btn" onClick={onClose} disabled={saving}>
+            <button type="button" className="secondary-btn" onClick={handleClose} disabled={saving}>
               Cancel
             </button>
             <button type="submit" className="primary-btn" disabled={saving}>

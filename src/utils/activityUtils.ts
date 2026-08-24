@@ -10,6 +10,9 @@ export function toDateKey(date: Date) {
 
 export function fromDateKey(value: string) {
   const [year, month, day] = value.split("-").map(Number);
+  if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+    return new Date();
+  }
   return new Date(year, (month ?? 1) - 1, day ?? 1);
 }
 

@@ -388,9 +388,13 @@ app.use(
     }
 
     const currentMongoUri = getMongoUri();
-    if (currentMongoUri && !databaseReady) {
+    // Only retry if no init is currently in-flight AND we still aren't ready.
+    // Without this guard, two concurrent first-requests could both call initializeStorage()
+    // simultaneously, overwriting databaseInitPromise and orphaning the first call.
+    if (currentMongoUri && !databaseReady && !databaseInitPromise) {
       databaseInitPromise = initializeStorage();
       await databaseInitPromise;
+      databaseInitPromise = null;
     }
 
     if (currentMongoUri && !databaseReady) {
@@ -575,7 +579,12 @@ function seededProblemScore(problem: {
     problem.revisitAt ? 2 : 0,
     problem.lastRevisionAt ? 2 : 0,
     problem.nextRevisionAt ? 2 : 0,
-    problem.updatedAt ? problem.updatedAt.getTime() / 1_000_000_000_000 : 0,
+    // Normalize updatedAt to a bounded [0, 2] contribution.
+    // We measure recency relative to a fixed baseline (2024-01-01) and cap at 2 years out.
+    // This prevents the tiebreaker from growing unboundedly each year.
+    problem.updatedAt
+      ? Math.min((problem.updatedAt.getTime() - 1_704_067_200_000) / (2 * 365.25 * 24 * 3600 * 1000), 2)
+      : 0,
   ].reduce((sum, value) => sum + value, 0);
 }
 
@@ -1044,10 +1053,23 @@ async function ensureSeedProblems() {
     await Problem.bulkWrite(operations);
   }
 
-  await Problem.deleteMany({
-    isSeeded: true,
-    problemKey: { $nin: seededKeys },
-  });
+  // Log any seeded problems that will be deleted BEFORE actually removing them.
+  // This makes it safe to catch accidental deletions from seed file typos or removals.
+  const staleSeededProblems = await Problem.find(
+    { isSeeded: true, problemKey: { $nin: seededKeys } },
+    { title: 1, problemKey: 1 }
+  ).lean();
+
+  if (staleSeededProblems.length > 0) {
+    console.warn(
+      `[ensureSeedProblems] Deleting ${staleSeededProblems.length} stale seeded problem(s) no longer in seed file:`,
+      staleSeededProblems.map((p) => `"${p.title}" (${p.problemKey})`).join(", ")
+    );
+    await Problem.deleteMany({
+      isSeeded: true,
+      problemKey: { $nin: seededKeys },
+    });
+  }
 }
 
 let memoryGeneralNotes: GeneralNote[] = generalNoteSeeds.map((seed, idx) => ({
@@ -1059,10 +1081,11 @@ let memoryGeneralNotes: GeneralNote[] = generalNoteSeeds.map((seed, idx) => ({
 
 async function ensureSeedGeneralNotes() {
   for (const seed of generalNoteSeeds) {
-    const existing = await GeneralNoteModelExport.findOne({ title: seed.title });
-    if (!existing) {
-      await GeneralNoteModelExport.create(seed);
-    }
+    await GeneralNoteModelExport.findOneAndUpdate(
+      { title: seed.title },
+      { $setOnInsert: seed },
+      { upsert: true, new: false }
+    );
   }
 }
 
@@ -1642,6 +1665,17 @@ app.patch(
 app.post(
   "/api/problems/:id/revision",
   asyncHandler(async (req, res) => {
+    // Accept the frontend's active SRS preset intervals so the server advances
+    // the schedule using the same cadence the user has selected (standard/aggressive/relaxed).
+    // Falls back to the default [1,3,7,14,30,60] schedule if not provided.
+    const rawIntervals: unknown = req.body?.srsIntervals;
+    const srsIntervals: number[] | undefined =
+      Array.isArray(rawIntervals) &&
+      rawIntervals.length > 0 &&
+      rawIntervals.every((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+        ? (rawIntervals as number[])
+        : undefined;
+
     if (storageMode === "memory") {
       const problemIndex = memoryProblems.findIndex((entry) => entry._id === req.params.id);
       if (problemIndex === -1) {
@@ -1660,7 +1694,7 @@ app.post(
         return;
       }
 
-      advanceRevisionSchedule(problem);
+      advanceRevisionSchedule(problem, new Date(), srsIntervals);
 
       problem.updatedAt = new Date();
       appendMemoryActivity(problem, "revision", problem.lastRevisionAt ?? problem.updatedAt);
@@ -1685,7 +1719,7 @@ app.post(
       return;
     }
 
-    advanceRevisionSchedule(problem);
+    advanceRevisionSchedule(problem, new Date(), srsIntervals);
 
     await problem.save();
     await recordMongoActivity(problem, "revision", problem.lastRevisionAt ?? new Date());

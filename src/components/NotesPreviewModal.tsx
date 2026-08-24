@@ -100,7 +100,6 @@ export function NotesPreviewModal({
                 <SyntaxCodeBlock
                   code={problem.codeSnippet ?? ""}
                   language={problem.codeSnippetLang ?? "cpp"}
-                  title="Implementation"
                 />
               </div>
             </div>

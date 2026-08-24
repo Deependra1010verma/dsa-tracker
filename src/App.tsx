@@ -58,7 +58,6 @@ import {
   AUTH_STORAGE_KEY,
   APP_VIEW_STATE_KEY,
   LOCAL_PROGRESS_STORAGE_KEY,
-  LOCAL_ACTIVITY_STORAGE_PREFIX,
   readPersistedViewState,
   readLocalProgress,
   saveLocalProgressItem,
@@ -196,7 +195,7 @@ export default function App() {
     }
   }, []);
 
-  const handleSaveGeneralNote = async (noteData: Partial<GeneralNote>) => {
+  const handleSaveGeneralNote = useCallback(async (noteData: Partial<GeneralNote>) => {
     if (editingGeneralNote) {
       try {
         const res = await api<{ note: GeneralNote }>(`/api/general-notes/${editingGeneralNote._id}`, {
@@ -208,12 +207,15 @@ export default function App() {
           return;
         }
       } catch {}
+      // Optimistic local update if API failed for edit (safe — note already has a real _id)
       setGeneralNotes((prev) =>
         prev.map((n) =>
           n._id === editingGeneralNote._id ? ({ ...n, ...noteData, updatedAt: new Date() } as GeneralNote) : n
         )
       );
     } else {
+      // For CREATE: do NOT fall back to a temp fake _id.
+      // A note with a fake _id would silently fail all future edits (PATCH to a non-existent id).
       try {
         const res = await api<{ note: GeneralNote }>("/api/general-notes", {
           method: "POST",
@@ -221,36 +223,23 @@ export default function App() {
         });
         if (res.note) {
           setGeneralNotes((prev) => [res.note, ...prev]);
-          return;
         }
-      } catch {}
-      const newNote: GeneralNote = {
-        _id: `note:${Date.now()}`,
-        title: noteData.title || "Untitled Note",
-        category: noteData.category || "Algorithmic Patterns",
-        summary: noteData.summary || "",
-        content: noteData.content || "",
-        keyTakeaways: noteData.keyTakeaways || [],
-        mistakesToAvoid: noteData.mistakesToAvoid || [],
-        codeSnippets: noteData.codeSnippets || [],
-        tags: noteData.tags || [],
-        importance: noteData.importance || "Important",
-        isPinned: Boolean(noteData.isPinned),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      setGeneralNotes((prev) => [newNote, ...prev]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not create note. Check your connection and try again.");
+      }
     }
-  };
+  }, [editingGeneralNote]);
 
   const handleDeleteGeneralNote = async (noteId: string) => {
     try {
       await api(`/api/general-notes/${noteId}`, { method: "DELETE" });
-    } catch {}
-    setGeneralNotes((prev) => prev.filter((n) => n._id !== noteId));
+      setGeneralNotes((prev) => prev.filter((n) => n._id !== noteId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete note");
+    }
   };
 
-  const handleTogglePinGeneralNote = async (note: GeneralNote) => {
+  const handleTogglePinGeneralNote = useCallback(async (note: GeneralNote) => {
     const nextPinned = !note.isPinned;
     try {
       const res = await api<{ note: GeneralNote }>(`/api/general-notes/${note._id}`, {
@@ -265,7 +254,7 @@ export default function App() {
     setGeneralNotes((prev) =>
       prev.map((n) => (n._id === note._id ? { ...n, isPinned: nextPinned } : n))
     );
-  };
+  }, []);
 
 
   useEffect(() => {
@@ -286,6 +275,8 @@ export default function App() {
     setSelectedTopic("all");
     setDrawerOpen(false);
     setActiveProblem(null);
+  // loadData is stable via useCallback — safe to include
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProblemSet]);
 
   const [drawerMode, setDrawerMode] = useState<"edit" | "notes">(persistedViewState.drawerMode ?? "notes");
@@ -425,6 +416,13 @@ export default function App() {
     return map;
   }, [problems]);
 
+  // Stable O(1) lookup map — memoized to prevent re-renders in child components
+  // that receive it as a prop (e.g. ActivityInsightsPanel).
+  const problemLookup = useMemo(
+    () => new Map(problems.map((problem) => [problem._id, problem])),
+    [problems]
+  );
+
   const revisionStateMap = useMemo(() => {
     const map = new Map<string, RevisionState>();
     for (const problem of problems) {
@@ -490,7 +488,7 @@ export default function App() {
     }
   }, [loadGeneralNotes, selectedProblemSet]);
 
-  async function loadData(options?: { silent?: boolean }) {
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
     try {
       if (!options?.silent) {
         setLoading(true);
@@ -502,7 +500,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [handleSilentRefresh]);
 
   const upsertProblem = useCallback((updatedProblem: Problem) => {
     setProblems((current) =>
@@ -678,7 +676,7 @@ export default function App() {
     void loadData({
       silent: topics.length > 0 || problems.length > 0,
     });
-  }, [isAuthenticated]);
+  }, [isAuthenticated, loadData]);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -1453,6 +1451,7 @@ export default function App() {
       setCompletingRevisionIds((prev) => new Set(prev).add(problem._id));
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/revision`, {
         method: "POST",
+        body: JSON.stringify({ srsIntervals: activeSrsPreset.intervals }),
       });
       if (!isLatestMutation(problem._id, seq)) {
         return;
@@ -1925,13 +1924,13 @@ export default function App() {
           <ActivityInsightsPanel
             insights={activityInsights}
             scopeLabel={selectedTopicData?.name ?? "All topics"}
-            problemLookup={new Map(problems.map((problem) => [problem._id, problem]))}
+            problemLookup={problemLookup}
             nowDate={nowDate}
             onOpenProblem={(problemId) => {
               void openProblemById(problemId);
             }}
             onCompleteRevision={(problemId) => {
-              const matchedProblem = problems.find((problem) => problem._id === problemId);
+              const matchedProblem = problemLookup.get(problemId);
               if (matchedProblem && isRevisionActionable(matchedProblem, nowDate)) {
                 void completeRevision(matchedProblem);
               }
@@ -2233,6 +2232,7 @@ export default function App() {
             <option value="unsolved">Unsolved</option>
             <option value="solved">Solved</option>
             <option value="revisit">Revisit</option>
+            <option value="skipped">Skipped</option>
           </select>
 
           <select
@@ -2252,8 +2252,8 @@ export default function App() {
           >
             <option value="all">All ratings ⭐</option>
             <option value="10">10 ⭐ (Top Priority)</option>
-            <option value="8–9">8–9 ⭐ (High Priority)</option>
-            <option value="5–7">5–7 ⭐ (Medium)</option>
+            <option value="8-9">8-9 ⭐ (High Priority)</option>
+            <option value="5-7">5-7 ⭐ (Medium)</option>
           </select>
 
           <button className="ghost-btn" onClick={() => openAddDrawer(selectedTopic !== "all" ? selectedTopic : undefined)}>
