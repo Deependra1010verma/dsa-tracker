@@ -1729,10 +1729,10 @@ export default function App() {
                   <div className="topic-copy">
                     <span className="topic-name">{topic.name}</span>
                     <span className="topic-subtitle">
-                      {liveStats.solved}/{liveStats.total || topic.targetCount} done
+                      {liveStats.solved}/{liveStats.total} done
                     </span>
                   </div>
-                  <span className="topic-count">{topic.targetCount}</span>
+                  <span className="topic-count">{liveStats.total}</span>
                 </button>
                 {subCategories.length > 0 ? (
                   <div className="topic-subcategory-list" aria-label={`${topic.name} subtopics`}>

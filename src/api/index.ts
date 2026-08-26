@@ -344,11 +344,11 @@ async function initializeStorage() {
     await dropLegacyTopicIndexes();
     await ensureSeedTopics();
     await ensureSeedGeneralNotes();
+    await ensureSeedProblems();
 
     const problemCount = await Problem.countDocuments();
     if (problemCount === 0) {
-      console.log("Database is empty. Initializing seeds...");
-      await ensureSeedProblems();
+      console.log("Database is empty. Initializing revision & activities...");
       await backfillRevisionSchedules();
       await ensureActivityHistory();
       console.log("Database seeding completed.");
