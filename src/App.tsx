@@ -293,6 +293,7 @@ export default function App() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [completingRevisionIds, setCompletingRevisionIds] = useState<Set<string>>(() => new Set());
+  const [snoozingRevisionIds, setSnoozingRevisionIds] = useState<Set<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const [revisitSubTab, setRevisitSubTab] = useState<"queue" | "heatmap" | "all">("queue");
   const [revisionSearch, setRevisionSearch] = useState("");
@@ -313,6 +314,19 @@ export default function App() {
     setSrsPresetKey(newKey);
     if (typeof window !== "undefined") {
       localStorage.setItem("dsa_srs_preset", newKey);
+    }
+    // Fire-and-forget: reschedule all active problems with new intervals
+    const newIntervals = SRS_PRESETS[newKey]?.intervals;
+    if (newIntervals) {
+      void api<{ rescheduled: number }>("/api/problems/reschedule-all", {
+        method: "POST",
+        body: JSON.stringify({ srsIntervals: newIntervals }),
+      }).then(() => {
+        // Refresh problems to reflect new nextRevisionAt dates
+        void loadData({ silent: true });
+      }).catch(() => {
+        // Preset change is saved locally; reschedule failure is non-critical
+      });
     }
   };
   const [sectionRowLimit, setSectionRowLimit] = useState(20);
@@ -1533,6 +1547,32 @@ export default function App() {
     }
   }, [activeProblem, activeSrsPreset.intervals, appendActivityRecord, completingRevisionIds, isLatestMutation, nextMutationSeq, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
 
+  const snoozeRevision = useCallback(async (problem: Problem, days = 1) => {
+    if (snoozingRevisionIds.has(problem._id)) return;
+    setSnoozingRevisionIds((prev) => new Set(prev).add(problem._id));
+    // Optimistic update: push nextRevisionAt forward
+    const base = toValidDate(problem.nextRevisionAt) ?? new Date();
+    const optimisticProblem = {
+      ...problem,
+      nextRevisionAt: addDays(base, days).toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    upsertProblem(optimisticProblem);
+    try {
+      const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/snooze`, {
+        method: "POST",
+        body: JSON.stringify({ days }),
+      });
+      upsertProblem(response.problem);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not snooze revision");
+      upsertProblem(problem); // revert on failure
+    } finally {
+      setSnoozingRevisionIds((prev) => { const next = new Set(prev); next.delete(problem._id); return next; });
+    }
+    setNow(Date.now());
+  }, [snoozingRevisionIds, upsertProblem, setError]);
+
   const deleteProblem = useCallback(async (problemId: string) => {
     try {
       const target = problems.find((p) => p._id === problemId);
@@ -1916,7 +1956,10 @@ export default function App() {
                 className={`revisit-tab-btn ${revisitSubTab === "heatmap" ? "active" : ""}`}
                 onClick={() => setRevisitSubTab("heatmap")}
               >
-                <span>📊 Activity & Heatmap</span>
+                <span>📊 Activity &amp; Heatmap</span>
+                {activityInsights.currentStreak > 0 ? (
+                  <span className="revisit-streak-badge">🔥 {activityInsights.currentStreak}d</span>
+                ) : null}
               </button>
               <button
                 type="button"
@@ -1926,6 +1969,12 @@ export default function App() {
                 <span>📚 All Revisit View</span>
               </button>
             </div>
+            {/* Inline streak badge on Queue tab too */}
+            {revisitSubTab === "queue" && activityInsights.currentStreak > 0 ? (
+              <div className="revision-streak-inline">
+                🔥 {activityInsights.currentStreak} day streak
+              </div>
+            ) : null}
 
             {revisitSubTab === "queue" || revisitSubTab === "all" ? (
               <div className="revisit-toolbar">
@@ -2084,6 +2133,14 @@ export default function App() {
                           </div>
                           <div className="revision-card-actions">
                             <span className="revision-priority-pill">{getRevisionQueueMeta(problem, state).label}</span>
+                            <button
+                              className="revision-action ghost snooze-btn"
+                              title="Snooze 1 day"
+                              disabled={snoozingRevisionIds.has(problem._id)}
+                              onClick={(e) => { e.stopPropagation(); void snoozeRevision(problem, 1); }}
+                            >
+                              {snoozingRevisionIds.has(problem._id) ? "..." : "⏰ +1d"}
+                            </button>
                             <button className="revision-action" onClick={() => openProblemLink(problem)}>
                               Open
                             </button>
@@ -2091,6 +2148,20 @@ export default function App() {
                         </article>
                       );
                     })
+                  ) : revisedTodayProblems.length > 0 ? (
+                    // All caught up — celebratory empty state
+                    <div className="revision-empty revision-all-done">
+                      <span className="revision-done-icon">🎉</span>
+                      <strong>All caught up for today!</strong>
+                      <span>
+                        {sidebarRevisionProblems[0]
+                          ? `Next: ${sidebarRevisionProblems[0].state.subtitle} · ${sidebarRevisionProblems[0].problem.title}`
+                          : "No more revisions scheduled"}
+                      </span>
+                      {activityInsights.currentStreak > 0 ? (
+                        <span className="revision-done-streak">🔥 {activityInsights.currentStreak} day streak</span>
+                      ) : null}
+                    </div>
                   ) : (
                     <div className="revision-empty">No revision is due right now.</div>
                   )}
@@ -2113,67 +2184,90 @@ export default function App() {
                   <strong>Coming up ({filteredSidebarRevisionProblems.length})</strong>
                 </div>
                 <div className="revision-list">
-                  {filteredSidebarRevisionProblems.length > 0 ? (
-                    (comingUpLaneExpanded ? filteredSidebarRevisionProblems : filteredSidebarRevisionProblems.slice(0, 5)).map(({ problem, state }) => {
-                      const isChecked = completingRevisionIds.has(problem._id);
-                      return (
-                        <article key={problem._id} className="revision-card upcoming">
-                          <button
-                            className={`revision-check ${isChecked ? "checked" : ""}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void completeRevision(problem);
-                            }}
-                            aria-label="Mark revision complete"
-                            title="Mark done"
-                            disabled={completingRevisionIds.has(problem._id)}
-                          >
-                            {isChecked ? "✓" : ""}
-                          </button>
-                          <div className="revision-card-copy">
-                            <div className="revision-title-row">
-                              <strong>{problem.title}</strong>
+                  {filteredSidebarRevisionProblems.length > 0 ? (() => {
+                    // Group by day bucket: Tomorrow / This week / Later
+                    const tomorrow: typeof filteredSidebarRevisionProblems = [];
+                    const thisWeek: typeof filteredSidebarRevisionProblems = [];
+                    const later: typeof filteredSidebarRevisionProblems = [];
+                    for (const item of filteredSidebarRevisionProblems) {
+                      const d = item.state.daysAway ?? 999;
+                      if (d <= 1) tomorrow.push(item);
+                      else if (d <= 7) thisWeek.push(item);
+                      else later.push(item);
+                    }
+                    const groups = [
+                      { label: "Tomorrow", items: tomorrow },
+                      { label: "This week", items: thisWeek },
+                      { label: "Later", items: later },
+                    ].filter((g) => g.items.length > 0);
+
+                    return groups.map((group) => (
+                      <div key={group.label} className="coming-up-group">
+                        <div className="coming-up-group-label">
+                          <span>{group.label}</span>
+                          <span className="coming-up-group-count">{group.items.length}</span>
+                        </div>
+                        {(comingUpLaneExpanded ? group.items : group.items.slice(0, 3)).map(({ problem, state }) => {
+                          const isChecked = completingRevisionIds.has(problem._id);
+                          return (
+                            <article key={problem._id} className="revision-card upcoming">
                               <button
-                                type="button"
-                                className="table-workspace-btn revision-workspace-btn"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleWorkspaceClick(problem);
-                                }}
-                                title="Open Problem Overview"
+                                className={`revision-check ${isChecked ? "checked" : ""}`}
+                                onClick={(event) => { event.stopPropagation(); void completeRevision(problem); }}
+                                aria-label="Mark revision complete"
+                                title="Mark done"
+                                disabled={completingRevisionIds.has(problem._id)}
                               >
-                                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
-                                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                                  <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                                </svg>
+                                {isChecked ? "✓" : ""}
                               </button>
-                            </div>
-                            <div className="revision-meta-row">
-                              <span>{state.subtitle}</span>
-                              <span>{problem.topic.name}</span>
-                              <span>{problem.difficulty}</span>
-                            </div>
+                              <div className="revision-card-copy">
+                                <div className="revision-title-row">
+                                  <strong>{problem.title}</strong>
+                                  <button
+                                    type="button"
+                                    className="table-workspace-btn revision-workspace-btn"
+                                    onClick={(event) => { event.stopPropagation(); handleWorkspaceClick(problem); }}
+                                    title="Open Problem Overview"
+                                  >
+                                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
+                                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                      <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                                    </svg>
+                                  </button>
+                                </div>
+                                <div className="revision-meta-row">
+                                  <span>{state.subtitle}</span>
+                                  <span>{problem.topic.name}</span>
+                                  <span>{problem.difficulty}</span>
+                                </div>
+                              </div>
+                              <div className="revision-card-actions">
+                                <span className="revision-priority-pill subtle">{getRevisionQueueMeta(problem, state).label}</span>
+                                <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
+                                  Open
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                        {!comingUpLaneExpanded && group.items.length > 3 ? (
+                          <div className="coming-up-overflow">
+                            +{group.items.length - 3} more in {group.label.toLowerCase()}
                           </div>
-                          <div className="revision-card-actions">
-                            <span className="revision-priority-pill subtle">{getRevisionQueueMeta(problem, state).label}</span>
-                            <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
-                              Open
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })
-                  ) : (
+                        ) : null}
+                      </div>
+                    ));
+                  })() : (
                     <div className="revision-empty">No upcoming revisions scheduled.</div>
                   )}
 
-                  {filteredSidebarRevisionProblems.length > 5 ? (
+                  {filteredSidebarRevisionProblems.length > 0 ? (
                     <button
                       type="button"
                       className="lane-show-more-btn"
                       onClick={() => setComingUpLaneExpanded(!comingUpLaneExpanded)}
                     >
-                      {comingUpLaneExpanded ? "Show Less" : `Show ${filteredSidebarRevisionProblems.length - 5} more...`}
+                      {comingUpLaneExpanded ? "Show less" : `Show all ${filteredSidebarRevisionProblems.length} coming up`}
                     </button>
                   ) : null}
                 </div>

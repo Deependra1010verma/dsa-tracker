@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Problem, ProblemFormState, RevisionState } from "../appTypes";
 import { PatternFamilySection, ProblemPrerequisitesSection } from "./PrerequisitesSections";
 import { ActiveRecallPanel, SectionBadge } from "./StatCards";
@@ -82,6 +82,24 @@ export function ProblemWorkspaceView({
 }: ProblemWorkspaceViewProps) {
   const savedAgoLabel = useRelativeTime(lastSavedAt);
 
+  // Ctrl+D — mark revision done without leaving the keyboard
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "d" && activeRevisionState?.isScheduled && !activeRevisionState.isComplete) {
+        e.preventDefault();
+        if (!completingRevisionIds.has(activeProblem._id)) {
+          onCompleteRevision(activeProblem);
+        }
+      }
+    },
+    [activeProblem, activeRevisionState, completingRevisionIds, onCompleteRevision]
+  );
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
   const saveIndicatorText =
     workspaceSaveState === "dirty"
       ? "Unsaved changes"
@@ -146,8 +164,10 @@ export function ProblemWorkspaceView({
               className="secondary-btn"
               disabled={completingRevisionIds.has(activeProblem._id)}
               onClick={() => void onCompleteRevision(activeProblem)}
+              title="Mark revision complete (Ctrl+D)"
             >
-              {completingRevisionIds.has(activeProblem._id) ? "Updating..." : "Revision done"}
+              {completingRevisionIds.has(activeProblem._id) ? "Updating..." : "✓ Revision done"}
+              <span style={{ opacity: 0.5, fontSize: "11px", marginLeft: "6px" }}>Ctrl+D</span>
             </button>
           ) : null}
           <button className="secondary-btn" onClick={() => onOpenEditDrawer(activeProblem)}>

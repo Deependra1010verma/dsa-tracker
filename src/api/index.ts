@@ -1833,6 +1833,107 @@ app.post(
   })
 );
 
+// Recalculate nextRevisionAt for all active revision problems using new SRS intervals.
+// Called when the user switches SRS preset so existing schedules stay consistent.
+app.post(
+  "/api/problems/reschedule-all",
+  asyncHandler(async (req, res) => {
+    const rawIntervals: unknown = req.body?.srsIntervals;
+    const srsIntervals: number[] | undefined =
+      Array.isArray(rawIntervals) &&
+      rawIntervals.length > 0 &&
+      rawIntervals.every((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+        ? (rawIntervals as number[])
+        : undefined;
+
+    if (!srsIntervals) {
+      res.status(400).json({ message: "srsIntervals is required and must be a non-empty array of positive numbers" });
+      return;
+    }
+
+    if (storageMode === "memory") {
+      let count = 0;
+      for (const problem of memoryProblems) {
+        if (!isRevisionActiveStatus(problem.status)) continue;
+        const lastRev = toValidDate(problem.lastRevisionAt);
+        if (!lastRev) continue;
+        const stage = Math.max(problem.revisionStage ?? 0, 0);
+        if (stage >= srsIntervals.length) continue; // already complete
+        const nextIntervalDays = srsIntervals[stage] ?? srsIntervals[srsIntervals.length - 1];
+        problem.nextRevisionAt = addDays(lastRev, nextIntervalDays);
+        problem.updatedAt = new Date();
+        count++;
+      }
+      res.json({ rescheduled: count });
+      return;
+    }
+
+    const problems = await Problem.find({
+      status: { $in: ["solved", "revisit"] },
+      lastRevisionAt: { $exists: true, $ne: null },
+      revisionCompletedAt: { $exists: false },
+      nextRevisionAt: { $exists: true, $ne: null },
+    }).select("_id revisionStage lastRevisionAt nextRevisionAt");
+
+    const writes = problems
+      .map((problem) => {
+        const stage = Math.max(problem.revisionStage ?? 0, 0);
+        if (stage >= srsIntervals.length) return null;
+        const lastRev = toValidDate(problem.lastRevisionAt);
+        if (!lastRev) return null;
+        const nextIntervalDays = srsIntervals[stage] ?? srsIntervals[srsIntervals.length - 1];
+        const newNextRevisionAt = addDays(lastRev, nextIntervalDays);
+        return {
+          updateOne: {
+            filter: { _id: problem._id },
+            update: { $set: { nextRevisionAt: newNextRevisionAt } },
+          },
+        };
+      })
+      .filter(Boolean);
+
+    if (writes.length > 0) {
+      await Problem.bulkWrite(writes as Parameters<typeof Problem.bulkWrite>[0]);
+    }
+
+    res.json({ rescheduled: writes.length });
+  })
+);
+
+// Snooze a revision: push nextRevisionAt forward by N days without incrementing revisionCount.
+app.post(
+  "/api/problems/:id/snooze",
+  asyncHandler(async (req, res) => {
+    const days = Math.min(Math.max(Number(req.body?.days) || 1, 1), 30);
+
+    if (storageMode === "memory") {
+      const problem = memoryProblems.find((entry) => entry._id === req.params.id);
+      if (!problem) {
+        res.status(404).json({ message: "Problem not found" });
+        return;
+      }
+
+      const base = toValidDate(problem.nextRevisionAt) ?? new Date();
+      problem.nextRevisionAt = addDays(base, days);
+      problem.updatedAt = new Date();
+      res.json({ problem: toMemoryProblemResponse(problem) });
+      return;
+    }
+
+    const problem = await Problem.findById(req.params.id);
+    if (!problem) {
+      res.status(404).json({ message: "Problem not found" });
+      return;
+    }
+
+    const base = toValidDate(problem.nextRevisionAt) ?? new Date();
+    problem.nextRevisionAt = addDays(base, days);
+    await problem.save();
+    const populated = await problem.populate("topic");
+    res.json({ problem: populated });
+  })
+);
+
 app.delete(
   "/api/problems/:id",
   asyncHandler(async (req, res) => {
