@@ -188,12 +188,15 @@ export function activityStorageKey(problemSet: string) {
 }
 
 export function getActivityDedupeKey(activity: ActivityRecord) {
+  // Use day-level precision so an optimistic local record and the server's
+  // confirmed record (which may differ by a few hundred ms) always collapse
+  // to the same key. The heatmap aggregates by day anyway, so this is exact.
   const date = toValidDate(activity.occurredAt);
+  const dayKey = date ? toDateKey(date) : "unknown";
   return [
     activity.problem?._id ?? "",
     activity.kind,
-    activity.topic?._id ?? "",
-    date ? Math.floor(date.getTime() / 1000) : activity.occurredAt,
+    dayKey,
   ].join(":");
 }
 
@@ -247,6 +250,23 @@ export function writeLocalActivities(problemSet: string, activities: ActivityRec
   } catch {
     // ignore storage error
   }
+}
+
+/**
+ * Remove local-* placeholder activity records that are older than `maxAgeMs`
+ * (default: 24 hours). These are optimistic records that were never confirmed
+ * by the server. After a full refresh cycle the server should have created its
+ * own record; any leftover local-* entries are stale ghosts.
+ */
+export function pruneLocalActivities(activities: ActivityRecord[], maxAgeMs = 24 * 60 * 60 * 1000): ActivityRecord[] {
+  const cutoff = Date.now() - maxAgeMs;
+  return activities.filter((activity) => {
+    if (!activity._id.startsWith("local-")) {
+      return true; // keep all server-confirmed records
+    }
+    const date = toValidDate(activity.occurredAt);
+    return date ? date.getTime() >= cutoff : false;
+  });
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {

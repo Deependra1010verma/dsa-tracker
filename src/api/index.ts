@@ -503,12 +503,17 @@ function applyRevisionProgressPatch(problem: any, next: Record<string, unknown>)
   patchDateField(problem, next, "revisionCompletedAt");
 }
 
-function isSameUtcDay(left: Date, right: Date) {
-  return (
-    left.getUTCFullYear() === right.getUTCFullYear() &&
-    left.getUTCMonth() === right.getUTCMonth() &&
-    left.getUTCDate() === right.getUTCDate()
-  );
+// Use local-time date strings (YYYY-MM-DD) so the "same day" check matches what
+// the frontend computes via toDateKey(). Using UTC would create a mismatch for
+// users in UTC+N timezones (e.g. IST at 00:00-05:29 is still "yesterday" in UTC).
+function isSameLocalDay(left: Date, right: Date) {
+  const toLocalDateKey = (d: Date) => {
+    const year = d.getFullYear();
+    const month = `${d.getMonth() + 1}`.padStart(2, "0");
+    const day = `${d.getDate()}`.padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+  return toLocalDateKey(left) === toLocalDateKey(right);
 }
 
 function canCompleteRevisionToday(problem: {
@@ -534,7 +539,7 @@ function canCompleteRevisionToday(problem: {
     return true;
   }
 
-  return !isSameUtcDay(lastRevisionAt, new Date());
+  return !isSameLocalDay(lastRevisionAt, new Date());
 }
 
 function seededProblemScore(problem: {
@@ -1369,6 +1374,90 @@ app.get(
       .lean();
 
     res.json({ activities });
+  })
+);
+
+app.post(
+  "/api/activity",
+  asyncHandler(async (req, res) => {
+    const body = req.body ?? {};
+    const kind: ActivityKind | undefined =
+      body.kind === "solved" || body.kind === "revision" || body.kind === "revisit" ? body.kind : undefined;
+    const occurredAt = toValidDate(body.occurredAt) ?? new Date();
+    const problemId: string | undefined = typeof body.problemId === "string" ? body.problemId : undefined;
+    const topicId: string | undefined = typeof body.topicId === "string" ? body.topicId : undefined;
+
+    if (!kind || !problemId || !topicId) {
+      res.status(400).json({ message: "Missing required fields: problemId, topicId, kind" });
+      return;
+    }
+
+    // Day-level dedup: one record per (problem, kind, calendar day)
+    const dayStart = new Date(occurredAt);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(occurredAt);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    if (storageMode === "memory") {
+      const problem = memoryProblems.find((entry) => entry._id === problemId);
+      if (!problem) {
+        res.status(404).json({ message: "Problem not found" });
+        return;
+      }
+
+      const existing = memoryActivities.find(
+        (entry) =>
+          entry.problemId === problemId &&
+          entry.kind === kind &&
+          entry.occurredAt >= dayStart &&
+          entry.occurredAt <= dayEnd
+      );
+
+      if (existing) {
+        res.json({ activity: toMemoryActivityResponse(existing) });
+        return;
+      }
+
+      appendMemoryActivity(problem, kind, occurredAt);
+      const created = memoryActivities.find(
+        (entry) =>
+          entry.problemId === problemId &&
+          entry.kind === kind &&
+          entry.occurredAt >= dayStart &&
+          entry.occurredAt <= dayEnd
+      );
+      res.json({ activity: created ? toMemoryActivityResponse(created) : null });
+      return;
+    }
+
+    // MongoDB: find or create by (problem, kind, day window)
+    const existing = await Activity.findOne({
+      problem: problemId,
+      kind,
+      occurredAt: { $gte: dayStart, $lte: dayEnd },
+    })
+      .populate("problem", "_id title difficulty platformName")
+      .populate("topic", "_id name")
+      .lean();
+
+    if (existing) {
+      res.json({ activity: existing });
+      return;
+    }
+
+    const created = await Activity.create({
+      problem: problemId,
+      topic: topicId,
+      kind,
+      occurredAt,
+    });
+
+    const populated = await Activity.findById(created._id)
+      .populate("problem", "_id title difficulty platformName")
+      .populate("topic", "_id name")
+      .lean();
+
+    res.json({ activity: populated });
   })
 );
 

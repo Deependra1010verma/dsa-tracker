@@ -76,6 +76,7 @@ import {
   isRevisionActionable,
   readLocalActivities,
   writeLocalActivities,
+  pruneLocalActivities,
   api,
 } from "./utils/storageUtils";
 
@@ -275,6 +276,9 @@ export default function App() {
     setSelectedTopic("all");
     setDrawerOpen(false);
     setActiveProblem(null);
+    // Reset revision filters when switching problem sets so they don't carry over
+    setRevisionSearch("");
+    setRevisionDifficulty("all");
   // loadData is stable via useCallback — safe to include
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProblemSet]);
@@ -479,10 +483,12 @@ export default function App() {
       });
 
       const mergedActivities = mergeActivityRecords(activitiesRes.activities, readLocalActivities(selectedProblemSet));
+      // Prune ghost local-* records older than 24h that were never confirmed
+      const prunedActivities = pruneLocalActivities(mergedActivities);
       setTopics(topicsRes.topics);
       setProblems(deduplicateProblems(patchedProblems));
-      setActivities(mergedActivities);
-      writeLocalActivities(selectedProblemSet, mergedActivities);
+      setActivities(prunedActivities);
+      writeLocalActivities(selectedProblemSet, prunedActivities);
       void loadGeneralNotes();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -548,6 +554,37 @@ export default function App() {
         };
         const nextActivities = mergeActivityRecords([nextActivity], current);
         writeLocalActivities(selectedProblemSet, nextActivities);
+
+        // Fire-and-forget: confirm this record to the server. On success,
+        // replace the local-* placeholder with the real server ID so that
+        // future merges with server data don't produce duplicates.
+        void api<{ activity: ActivityRecord | null }>("/api/activity", {
+          method: "POST",
+          body: JSON.stringify({
+            problemId: problem._id,
+            topicId: topic._id,
+            kind,
+            occurredAt: occurredAt.toISOString(),
+          }),
+        })
+          .then(({ activity: confirmed }) => {
+            if (!confirmed) return;
+            setActivities((prev) => {
+              // Swap out the local-* record for the server-confirmed one.
+              // mergeActivityRecords will dedup by (problemId:kind:day) so
+              // the local placeholder gets replaced cleanly.
+              const updated = mergeActivityRecords([confirmed], prev.filter(
+                (entry) => entry._id !== nextActivity._id
+              ));
+              writeLocalActivities(selectedProblemSet, updated);
+              return updated;
+            });
+          })
+          .catch(() => {
+            // Network failure — the local-* record stays in localStorage
+            // and will be pruned after 24 hours on the next full refresh.
+          });
+
         return nextActivities;
       });
     },
@@ -1010,10 +1047,20 @@ export default function App() {
     return deduplicated;
   }, [nowDate, problems, revisionStateMap]);
 
+  const revisedTodayIds = useMemo(() => {
+    const todayKey = toDateKey(nowDate);
+    return new Set(
+      activities
+        .filter((activity) => activity.kind === "revision" && toDateKey(new Date(activity.occurredAt)) === todayKey)
+        .map((activity) => activity.problem._id)
+    );
+  }, [activities, nowDate]);
+
+  // Due lane: problems that are due/overdue, excluding any already revised today
   const dueRevisionProblems = useMemo(() => {
     return [...revisionProblems]
       .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
-      .filter(({ state }) => state.isDue || state.isOverdue)
+      .filter(({ state, problem }) => (state.isDue || state.isOverdue) && !revisedTodayIds.has(problem._id))
       .sort((left, right) => {
         const leftMeta = getRevisionQueueMeta(left.problem, left.state);
         const rightMeta = getRevisionQueueMeta(right.problem, right.state);
@@ -1025,8 +1072,10 @@ export default function App() {
         const rightTime = right.state.dueDate?.getTime() ?? Number.POSITIVE_INFINITY;
         return leftTime - rightTime;
       });
-  }, [nowDate, revisionProblems, revisionStateMap]);
+  }, [nowDate, revisedTodayIds, revisionProblems, revisionStateMap]);
 
+
+  // Problems NOT yet due but coming up — excludes anything already revised today
   const sidebarRevisionProblems = useMemo(() => {
     return [...revisionProblems]
       .map((problem) => ({ problem, state: revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate) }))
@@ -1104,8 +1153,8 @@ export default function App() {
   }, [revisedTodayProblems, revisionDifficulty, revisionSearch]);
 
   const nextRevisionCandidate = dueRevisionProblems[0]?.problem ?? sidebarRevisionProblems[0]?.problem ?? null;
-  const showRevisionDashboard =
-    selectedTopic === "revision" && (revisionProblems.length > 0 || revisedTodayProblems.length > 0);
+  // Always show dashboard when on revision tab — empty states inside each lane handle the zero case
+  const showRevisionDashboard = selectedTopic === "revision";
 
   const toggleTopicExpanded = useCallback((topicId: string) => {
     setExpandedTopics((prev) => {
@@ -1143,8 +1192,9 @@ export default function App() {
 
 
   const startRevisionPractice = useCallback((problem: Problem) => {
-    openProblemLink(problem);
-  }, [openProblemLink]);
+    // Open the study workspace so the user can see their notes and recall prompts
+    openStudyView(problem);
+  }, [openStudyView]);
 
   const openEditDrawer = useCallback((problem: Problem) => {
     setActiveProblem(problem);
@@ -1433,6 +1483,10 @@ export default function App() {
   }, [activeProblem, activeSrsPreset.intervals, appendActivityRecord, isLatestMutation, nextMutationSeq, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
 
   const completeRevision = useCallback(async (problem: Problem) => {
+    // Guard: prevent double-tap (race between click and completingRevisionIds set)
+    if (completingRevisionIds.has(problem._id)) {
+      return;
+    }
     const seq = nextMutationSeq(problem._id);
     const completedAt = new Date();
     const optimisticProblem = normalizeProblemRevisionDates({ ...problem, updatedAt: completedAt.toISOString() });
@@ -1442,6 +1496,8 @@ export default function App() {
     }
     advanceRevisionSchedule(optimisticProblem, completedAt, activeSrsPreset.intervals);
     saveLocalProgressForProblem(optimisticProblem, getProblemProgressSnapshot(optimisticProblem));
+    // Set completingRevisionIds BEFORE the async work to block any second click
+    setCompletingRevisionIds((prev) => new Set(prev).add(problem._id));
     upsertProblem(optimisticProblem);
     if (activeProblem?._id === problem._id) {
       setActiveProblem(optimisticProblem);
@@ -1451,7 +1507,6 @@ export default function App() {
     setNow(Date.now());
 
     try {
-      setCompletingRevisionIds((prev) => new Set(prev).add(problem._id));
       const response = await api<{ problem: Problem }>(`/api/problems/${problem._id}/revision`, {
         method: "POST",
         body: JSON.stringify({ srsIntervals: activeSrsPreset.intervals }),
@@ -1476,7 +1531,7 @@ export default function App() {
         return next;
       });
     }
-  }, [activeProblem, activeSrsPreset.intervals, appendActivityRecord, isLatestMutation, nextMutationSeq, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
+  }, [activeProblem, activeSrsPreset.intervals, appendActivityRecord, completingRevisionIds, isLatestMutation, nextMutationSeq, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
 
   const deleteProblem = useCallback(async (problemId: string) => {
     try {
@@ -2155,7 +2210,7 @@ export default function App() {
                             </button>
                           </div>
                           <div className="revision-meta-row">
-                            <span>{toValidDate(problem.lastRevisionAt) ? `Revised on ${formatActivityDate(toValidDate(problem.lastRevisionAt) ?? nowDate)}` : "Revised today"}</span>
+                            <span>Rev {problem.revisionCount} · Stage {problem.revisionStage ?? 0}/{activeSrsPreset.intervals.length}</span>
                             <span>{problem.topic.name}</span>
                           </div>
                         </div>
