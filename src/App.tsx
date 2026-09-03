@@ -154,6 +154,13 @@ export default function App() {
     password: "",
   });
   const [loginError, setLoginError] = useState("");
+  // Rate-limit: after 5 wrong attempts, lock for 15 minutes
+  const [loginAttempts, setLoginAttempts] = useState(() => {
+    const saved = localStorage.getItem("dsa_login_attempts");
+    if (!saved) return { count: 0, lockedUntil: 0 };
+    try { return JSON.parse(saved) as { count: number; lockedUntil: number }; } catch { return { count: 0, lockedUntil: 0 }; }
+  });
+  const [exportingData, setExportingData] = useState(false);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [activities, setActivities] = useState<ActivityRecord[]>([]);
@@ -516,12 +523,65 @@ export default function App() {
       }
       setError("");
       await handleSilentRefresh();
+      // Reset backoff counter on success
+      refreshFailCountRef.current = 0;
     } catch (err) {
+      refreshFailCountRef.current += 1;
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }, [handleSilentRefresh]);
+
+  // Exponential backoff for automatic silent refresh
+  const refreshFailCountRef = useRef(0);
+  useEffect(() => {
+    const BASE_MS = 30_000; // 30s
+    const MAX_MS = 5 * 60_000; // 5 min cap
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    function scheduleNext() {
+      const failures = refreshFailCountRef.current;
+      const delay = Math.min(BASE_MS * Math.pow(2, failures), MAX_MS);
+      timeoutId = setTimeout(async () => {
+        await loadData({ silent: true });
+        scheduleNext();
+      }, delay);
+    }
+
+    scheduleNext();
+    return () => clearTimeout(timeoutId);
+  }, [loadData]);
+
+  const handleExportData = useCallback(async () => {
+    setExportingData(true);
+    try {
+      const [problemsRes, activitiesRes, notesRes] = await Promise.all([
+        api<{ problems: Problem[] }>(`/api/problems?set=${selectedProblemSet}&limit=9999`),
+        api<{ activities: ActivityRecord[] }>(`/api/activity?set=${selectedProblemSet}&limit=9999`),
+        api<{ notes: GeneralNote[] }>("/api/general-notes"),
+      ]);
+      const exportPayload = {
+        exportedAt: new Date().toISOString(),
+        problemSet: selectedProblemSet,
+        problems: problemsRes.problems ?? [],
+        activities: activitiesRes.activities ?? [],
+        generalNotes: notesRes.notes ?? [],
+      };
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `dsa-tracker-backup-${selectedProblemSet}-${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExportingData(false);
+    }
+  }, [selectedProblemSet, setError]);
+
 
   const upsertProblem = useCallback((updatedProblem: Problem) => {
     setProblems((current) =>
@@ -783,17 +843,42 @@ export default function App() {
       return;
     }
 
+    // Check lockout
+    const now = Date.now();
+    if (loginAttempts.lockedUntil > now) {
+      const secsLeft = Math.ceil((loginAttempts.lockedUntil - now) / 1000);
+      const minsLeft = Math.ceil(secsLeft / 60);
+      setLoginError(`Too many attempts. Try again in ${minsLeft} minute${minsLeft !== 1 ? "s" : ""}.`);
+      return;
+    }
+
     if (
       loginForm.username.trim() === DEFAULT_LOGIN.username &&
       loginForm.password === DEFAULT_LOGIN.password
     ) {
       window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
+      // Clear failure counter on success
+      const cleared = { count: 0, lockedUntil: 0 };
+      setLoginAttempts(cleared);
+      localStorage.setItem("dsa_login_attempts", JSON.stringify(cleared));
       setLoginError("");
       setIsAuthenticated(true);
       return;
     }
 
-    setLoginError("Invalid username or password.");
+    const newCount = loginAttempts.count + 1;
+    const LOCK_AFTER = 5;
+    const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 min
+    const newLocked = newCount >= LOCK_AFTER ? now + LOCK_DURATION_MS : loginAttempts.lockedUntil;
+    const nextAttempts = { count: newCount, lockedUntil: newLocked };
+    setLoginAttempts(nextAttempts);
+    localStorage.setItem("dsa_login_attempts", JSON.stringify(nextAttempts));
+
+    if (newCount >= LOCK_AFTER) {
+      setLoginError(`Too many failed attempts. Locked for 15 minutes.`);
+    } else {
+      setLoginError(`Invalid username or password. ${LOCK_AFTER - newCount} attempt${LOCK_AFTER - newCount !== 1 ? "s" : ""} left.`);
+    }
   }
 
   function handleLogout() {
@@ -1866,6 +1951,14 @@ export default function App() {
             <button className="secondary-btn" onClick={() => void loadData()}>
               Refresh
             </button>
+            <button
+              className="ghost-btn"
+              onClick={() => void handleExportData()}
+              disabled={exportingData}
+              title="Download full backup as JSON"
+            >
+              {exportingData ? "Exporting..." : "⬇ Export"}
+            </button>
             <button className="ghost-btn" onClick={handleLogout}>
               Logout
             </button>
@@ -1956,7 +2049,7 @@ export default function App() {
                 className={`revisit-tab-btn ${revisitSubTab === "heatmap" ? "active" : ""}`}
                 onClick={() => setRevisitSubTab("heatmap")}
               >
-                <span>📊 Activity &amp; Heatmap</span>
+                <span>📊 Activity & Heatmap</span>
                 {activityInsights.currentStreak > 0 ? (
                   <span className="revisit-streak-badge">🔥 {activityInsights.currentStreak}d</span>
                 ) : null}
