@@ -33,7 +33,7 @@ const problemSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["unsolved", "solved", "revisit", "skipped"],
+      enum: ["unsolved", "shaky", "solved", "revisit", "skipped"],
       default: "unsolved",
     },
     shortNote: { type: String, default: "" },
@@ -144,5 +144,4 @@ export const Activity = (mongoose.models.Activity as mongoose.Model<any>) || mon
 export const GeneralNoteModelExport = (mongoose.models.GeneralNote as mongoose.Model<any>) || mongoose.model("GeneralNote", generalNoteSchema);
 
 export { topicSeeds };
-
 

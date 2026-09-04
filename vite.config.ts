@@ -6,10 +6,6 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
-    define: {
-      __LOGIN_USERNAME__: JSON.stringify(env.USERNAME ?? ""),
-      __LOGIN_PASSWORD__: JSON.stringify(env.PASSWORD ?? ""),
-    },
     build: {
       outDir: "dist/web",
     },

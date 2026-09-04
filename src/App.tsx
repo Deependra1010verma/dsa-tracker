@@ -1,9 +1,8 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, Fragment, type FormEvent } from "react";
-import { topicSubCategories } from "./data/categories";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Prerequisite, PatternFamilyItem, GeneralNote } from "./api/types";
 import { GeneralNotesView } from "./components/GeneralNotesView";
 import { GeneralNoteModal } from "./components/GeneralNoteModal";
-import { addDays, advanceRevisionSchedule, clearRevisionSchedule, deriveRevisionState, initializeRevisionSchedule, startOfDay, toValidDate, SRS_PRESETS, type SrsPresetKey } from "./revision";
+import { addDays, advanceRevisionSchedule, toValidDate, SRS_PRESETS, type SrsPresetKey } from "./revision";
 
 import type {
   Difficulty,
@@ -11,24 +10,15 @@ import type {
   SortByOption,
   Topic,
   Problem,
-  Stats,
   ProblemFormState,
   RevisionState,
-  RevisionQueueMeta,
   ActivityKind,
   ActivityRecord,
   ActivityProblemSnapshot,
   ActivityTopicSnapshot,
-  ActivityEntry,
-  ActivityDayBucket,
-  ActivityWeek,
-  ActivityInsights,
-  RecallPrompt,
   RatingFilterOption,
   PersistedViewState,
   WorkspaceSaveState,
-  SavedProblemProgress,
-  LocalProgressMap,
 } from "./appTypes";
 
 import {
@@ -43,11 +33,8 @@ import {
 } from "./utils/activityUtils";
 
 import {
-  formatRating,
   composeMistakeLog,
   splitMistakeLog,
-  buildRecallPrompts,
-  formatRevisionDueText,
   getRevisionState,
   getRevisionQueueMeta,
   getProblemCategories,
@@ -65,29 +52,34 @@ import {
   getSavedProgressForProblem,
   applySavedProgress,
   getProblemProgressSnapshot,
-  toIsoStringOrUndefined,
   normalizeProblemRevisionDates,
   withStatusSchedule,
   removeLocalProgressItem,
   deduplicateProblems,
-  activityStorageKey,
-  getActivityDedupeKey,
   mergeActivityRecords,
   isRevisionActionable,
+  getAuthToken,
+  setAuthToken,
+  clearAuthToken,
   readLocalActivities,
   writeLocalActivities,
   pruneLocalActivities,
   api,
 } from "./utils/storageUtils";
 
-import { ProblemRow } from "./components/ProblemRow";
-import { SectionBlock } from "./components/SectionBlock";
 import { NotesPreviewModal } from "./components/NotesPreviewModal";
 import { ActivityInsightsPanel } from "./components/ActivityInsightsPanel";
-import { StatCard, SectionBadge, ActiveRecallPanel } from "./components/StatCards";
+import { AnalyticsDashboard } from "./components/AnalyticsDashboard";
 import { ProblemPrerequisitesSection, PatternFamilySection } from "./components/PrerequisitesSections";
 import { ProblemWorkspaceView } from "./components/ProblemWorkspaceView";
 import { ProblemDrawer } from "./components/ProblemDrawer";
+import { AuthView } from "./components/AuthView";
+import { DashboardStats } from "./components/DashboardStats";
+import { AppSidebar } from "./components/AppSidebar";
+import { AppHero } from "./components/AppHero";
+import { ProblemListView, type ProblemTopicGroup } from "./components/ProblemListView";
+import { RevisionDashboard } from "./components/RevisionDashboard";
+import { useProblemKeyboardNavigation } from "./hooks/useProblemKeyboardNavigation";
 
 const emptyForm: ProblemFormState = {
   title: "",
@@ -121,6 +113,7 @@ const statusLabels: Record<Status, string> = {
   unsolved: "Unsolved",
   solved: "Solved",
   revisit: "Revisit",
+  shaky: "Shaky",
   skipped: "Skipped",
 };
 
@@ -130,24 +123,14 @@ const difficultyTone: Record<Difficulty, string> = {
   Hard: "tone-hard",
 };
 
-declare const __LOGIN_USERNAME__: string;
-declare const __LOGIN_PASSWORD__: string;
-
-const DEFAULT_LOGIN = {
-  username: __LOGIN_USERNAME__.trim(),
-  password: __LOGIN_PASSWORD__,
-};
-
-
 export default function App() {
-  const loginConfigured = Boolean(DEFAULT_LOGIN.username && DEFAULT_LOGIN.password);
+  const [loginConfigured, setLoginConfigured] = useState(true);
   const persistedViewState = useMemo(() => readPersistedViewState(), []);
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window === "undefined") {
       return false;
     }
-
-    return window.localStorage.getItem(AUTH_STORAGE_KEY) === "true";
+    return Boolean(getAuthToken() || window.localStorage.getItem(AUTH_STORAGE_KEY) === "true");
   });
   const [loginForm, setLoginForm] = useState({
     username: "",
@@ -277,6 +260,23 @@ export default function App() {
   }, [previewNoteProblem]);
 
   useEffect(() => {
+    api<{ isConfigured: boolean }>("/api/auth/status")
+      .then((res) => {
+        setLoginConfigured(res.isConfigured);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setIsAuthenticated(false);
+      setLoginError("Session expired or invalid. Please sign in again.");
+    };
+    window.addEventListener("dsa-unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("dsa-unauthorized", handleUnauthorized);
+  }, []);
+
+  useEffect(() => {
     if (didInitialLoadRef.current) {
       void loadData({ silent: false });
     }
@@ -298,6 +298,10 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [workspaceSaveState, setWorkspaceSaveState] = useState<WorkspaceSaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  // justSolvedIds: IDs of problems that just turned "solved" — triggers flash animation, auto-clears after 1.8s
+  const [justSolvedIds, setJustSolvedIds] = useState<Set<string>>(() => new Set());
+  // kbFocusedId: problem ID currently focused via keyboard (j/k navigation)
+  const [kbFocusedId, setKbFocusedId] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [completingRevisionIds, setCompletingRevisionIds] = useState<Set<string>>(() => new Set());
   const [snoozingRevisionIds, setSnoozingRevisionIds] = useState<Set<string>>(() => new Set());
@@ -375,6 +379,7 @@ export default function App() {
     // revisitStatusCount = problems explicitly set to status "revisit".
     // Shown in sidebar "Revisit" button — separate concept from starred/revision.
     const revisitStatusCount = problems.filter((problem) => problem.status === "revisit").length;
+    const shakyProblems = problems.filter((problem) => problem.status === "shaky").length;
     const unsolvedProblems = problems.filter((problem) => problem.status === "unsolved").length;
     const skippedProblems = problems.filter((problem) => problem.status === "skipped").length;
 
@@ -383,6 +388,7 @@ export default function App() {
       solvedProblems,
       revisitProblems,
       revisitStatusCount,
+      shakyProblems,
       unsolvedProblems,
       skippedProblems,
     };
@@ -398,6 +404,7 @@ export default function App() {
       totalProblems: topicProblems.length,
       solvedProblems: topicProblems.filter((problem) => problem.status === "solved").length,
       revisitProblems: topicProblems.filter((problem) => problem.isPinned).length,
+      shakyProblems: topicProblems.filter((problem) => problem.status === "shaky").length,
       unsolvedProblems: topicProblems.filter((problem) => problem.status === "unsolved").length,
       skippedProblems: topicProblems.filter((problem) => problem.status === "skipped").length,
     };
@@ -835,15 +842,9 @@ export default function App() {
     window.localStorage.setItem(APP_VIEW_STATE_KEY, JSON.stringify(nextState));
   }, [activeProblem?._id, difficultyFilter, drawerMode, drawerOpen, isAuthenticated, ratingFilter, search, selectedTopic, selectedProblemSet, statusFilter]);
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!loginConfigured) {
-      setLoginError("Set USERNAME and PASSWORD in your .env file.");
-      return;
-    }
-
-    // Check lockout
     const now = Date.now();
     if (loginAttempts.lockedUntil > now) {
       const secsLeft = Math.ceil((loginAttempts.lockedUntil - now) / 1000);
@@ -852,37 +853,47 @@ export default function App() {
       return;
     }
 
-    if (
-      loginForm.username.trim() === DEFAULT_LOGIN.username &&
-      loginForm.password === DEFAULT_LOGIN.password
-    ) {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
-      // Clear failure counter on success
-      const cleared = { count: 0, lockedUntil: 0 };
-      setLoginAttempts(cleared);
-      localStorage.setItem("dsa_login_attempts", JSON.stringify(cleared));
-      setLoginError("");
-      setIsAuthenticated(true);
-      return;
-    }
+    try {
+      const res = await api<{ success: boolean; token?: string; message?: string }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          username: loginForm.username,
+          password: loginForm.password,
+        }),
+      });
 
-    const newCount = loginAttempts.count + 1;
-    const LOCK_AFTER = 5;
-    const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 min
-    const newLocked = newCount >= LOCK_AFTER ? now + LOCK_DURATION_MS : loginAttempts.lockedUntil;
-    const nextAttempts = { count: newCount, lockedUntil: newLocked };
-    setLoginAttempts(nextAttempts);
-    localStorage.setItem("dsa_login_attempts", JSON.stringify(nextAttempts));
+      if (res.success && res.token) {
+        setAuthToken(res.token);
+        window.localStorage.setItem(AUTH_STORAGE_KEY, "true");
+        const cleared = { count: 0, lockedUntil: 0 };
+        setLoginAttempts(cleared);
+        localStorage.setItem("dsa_login_attempts", JSON.stringify(cleared));
+        setLoginError("");
+        setIsAuthenticated(true);
+        return;
+      } else {
+        throw new Error(res.message || "Invalid username or password");
+      }
+    } catch (err) {
+      const newCount = loginAttempts.count + 1;
+      const LOCK_AFTER = 5;
+      const LOCK_DURATION_MS = 15 * 60 * 1000;
+      const newLocked = newCount >= LOCK_AFTER ? now + LOCK_DURATION_MS : loginAttempts.lockedUntil;
+      const nextAttempts = { count: newCount, lockedUntil: newLocked };
+      setLoginAttempts(nextAttempts);
+      localStorage.setItem("dsa_login_attempts", JSON.stringify(nextAttempts));
 
-    if (newCount >= LOCK_AFTER) {
-      setLoginError(`Too many failed attempts. Locked for 15 minutes.`);
-    } else {
-      setLoginError(`Invalid username or password. ${LOCK_AFTER - newCount} attempt${LOCK_AFTER - newCount !== 1 ? "s" : ""} left.`);
+      if (newCount >= LOCK_AFTER) {
+        setLoginError("Too many failed attempts. Locked for 15 minutes.");
+      } else {
+        const errMsg = err instanceof Error ? err.message : "Invalid username or password";
+        setLoginError(`${errMsg}. ${LOCK_AFTER - newCount} attempt${LOCK_AFTER - newCount !== 1 ? "s" : ""} left.`);
+      }
     }
   }
 
   function handleLogout() {
-    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    clearAuthToken();
     setIsAuthenticated(false);
     setLoginError("");
     setError("");
@@ -936,6 +947,11 @@ export default function App() {
           problem.pattern,
           problem.shortNote,
           problem.longNote,
+          // Full-text: search inside code snippets and mistake log fields
+          problem.codeSnippet,
+          problem.mistakeTrigger,
+          problem.mistakeReason,
+          problem.mistakeFix,
           ...problem.tags,
           ...categories,
         ]
@@ -952,7 +968,7 @@ export default function App() {
       const effectiveSortBy = statusFilter === "revisit" && sortByFilter === "status" ? "optimal" : sortByFilter;
 
       if (effectiveSortBy === "status") {
-        const statusMap: Record<Status, number> = { unsolved: 1, revisit: 2, solved: 3, skipped: 4 };
+        const statusMap: Record<Status, number> = { unsolved: 1, shaky: 2, revisit: 3, solved: 4, skipped: 5 };
         const statusDelta = statusMap[left.status] - statusMap[right.status];
         if (statusDelta !== 0) return statusDelta;
       } else if (effectiveSortBy === "difficulty") {
@@ -998,20 +1014,7 @@ export default function App() {
   }, [filteredProblems, selectedTopic, sortByFilter, statusFilter]);
 
   const groupedByTopicAndSection = useMemo(() => {
-    const topicGroups: Array<{
-      topicId: string;
-      topicName: string;
-      accent: string;
-      solvedCount: number;
-      totalCount: number;
-      sections: Array<{
-        sectionKey: string;
-        sectionName: string;
-        solvedCount: number;
-        totalCount: number;
-        problems: Array<{ problem: Problem; displayIndex: number }>;
-      }>;
-    }> = [];
+    const topicGroups: ProblemTopicGroup[] = [];
     const topicGroupsByKey = new Map<string, typeof topicGroups[number]>();
     let displayIndex = 1;
 
@@ -1534,6 +1537,7 @@ export default function App() {
   ]);
 
   const toggleProblemExpanded = useCallback((problemId: string) => {
+
     setExpandedProblems((current) => {
       const next = new Set(current);
       if (next.has(problemId)) {
@@ -1557,6 +1561,11 @@ export default function App() {
     }
     if (problem.status !== "solved" && nextStatus === "solved") {
       appendActivityRecord("solved", optimisticProblem, optimisticProblem.topic);
+      // Trigger solve flash animation; auto-clear after animation completes
+      setJustSolvedIds((prev) => new Set(prev).add(problem._id));
+      setTimeout(() => {
+        setJustSolvedIds((prev) => { const next = new Set(prev); next.delete(problem._id); return next; });
+      }, 1800);
     } else if (problem.status !== "revisit" && nextStatus === "revisit") {
       appendActivityRecord("revisit", optimisticProblem, optimisticProblem.topic);
     }
@@ -1580,6 +1589,16 @@ export default function App() {
       setError(err instanceof Error ? err.message : "Could not update status");
     }
   }, [activeProblem, activeSrsPreset.intervals, appendActivityRecord, isLatestMutation, nextMutationSeq, setError, setActiveProblem, syncFormFromProblem, upsertProblem]);
+
+  useProblemKeyboardNavigation({
+    sortedFilteredProblems,
+    focusedProblemId: kbFocusedId,
+    setFocusedProblemId: setKbFocusedId,
+    updateStatus,
+    openStudyView,
+    openEditDrawer,
+    openProblemLink,
+  });
 
   const completeRevision = useCallback(async (problem: Problem) => {
     // Guard: prevent double-tap (race between click and completingRevisionIds set)
@@ -1716,255 +1735,53 @@ export default function App() {
       : 0;
 
   const authView = (
-    <main className="auth-shell">
-      <section className="auth-hero">
-        <div className="brand auth-brand">
-          <div className="brand-mark">DSA</div>
-          <div>
-            <h1>Tracker</h1>
-            <p>Private DSA practice board with a simple login gate.</p>
-          </div>
-        </div>
-
-        <div className="auth-copy">
-          <p className="eyebrow">Welcome back</p>
-          <h2>Log in.</h2>
-          <p className="hero-copy">Use your `.env` values.</p>
-          {!loginConfigured ? (
-            <div className="banner error">
-              Set <code>USERNAME</code> and <code>PASSWORD</code> in your{" "}
-              <code>.env</code> file to enable sign in.
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="auth-card">
-        <p className="panel-label">Secure access</p>
-        <h3>Sign in</h3>
-        <p className="auth-note">Local login only.</p>
-
-        <form className="auth-form" onSubmit={handleLogin}>
-          <label>
-            Username
-            <input
-              value={loginForm.username}
-              onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })}
-              autoComplete="username"
-              placeholder="name@example.com"
-            />
-          </label>
-
-          <label>
-            Password
-            <input
-              type="password"
-              value={loginForm.password}
-              onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
-              autoComplete="current-password"
-              placeholder="Password"
-            />
-          </label>
-
-          {loginError ? <div className="banner error">{loginError}</div> : null}
-
-          <button className="primary-btn auth-submit" type="submit">
-            Enter Tracker
-          </button>
-        </form>
-      </section>
-    </main>
+    <AuthView
+      loginConfigured={loginConfigured}
+      loginForm={loginForm}
+      loginError={loginError}
+      onLogin={handleLogin}
+      onLoginFormChange={setLoginForm}
+    />
   );
 
   const dashboardView = (
     <div className="app-shell focus-mode">
-      {/* Sticky Mobile Top Bar */}
-      <header className="mobile-header">
-        <button className="menu-btn" onClick={() => setMobileSidebarOpen(true)} aria-label="Open menu">
-          <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-          </svg>
-        </button>
-        <span className="mobile-title">DSA Tracker</span>
-        <div className="mobile-header-actions">
-          <button className="icon-btn" onClick={() => void loadData()} title="Refresh">
-            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 4v6h-6M1 20v-6h6"></path>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      {/* Sidebar Backdrop Overlay on Mobile */}
-      {mobileSidebarOpen ? (
-        <div className="sidebar-backdrop" onClick={() => setMobileSidebarOpen(false)} />
-      ) : null}
-
-      <aside className={`sidebar ${mobileSidebarOpen ? "open" : ""}`}>
-        <div className="sidebar-header-mobile">
-          <span className="sidebar-mobile-title">Topics</span>
-          <button className="close-btn" onClick={() => setMobileSidebarOpen(false)} aria-label="Close menu">
-            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-
-        <div className="brand">
-          <div className="brand-mark">DSA</div>
-          <div>
-            <h1>Tracker</h1>
-            <p>Problems and notes.</p>
-          </div>
-        </div>
-
-        <div style={{ padding: "0 1rem", marginBottom: "1rem", marginTop: "-0.5rem" }}>
-            <select
-              value={selectedProblemSet}
-              onChange={(e) => setSelectedProblemSet(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "0.5rem 0.75rem",
-                borderRadius: "0.5rem",
-                backgroundColor: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "var(--text)",
-                outline: "none",
-                fontSize: "0.85rem",
-                cursor: "pointer",
-              }}
-            >
-              <option value="set1" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>Main List (Set 1)</option>
-              <option value="set2" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>Problem Set 2</option>
-              <option value="set3" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>Problem Set 3</option>
-            </select>
-          </div>
-
-        <button
-          className={`topic-card all-topics ${selectedTopic === "all" ? "active" : ""}`}
-          onClick={() => focusTopicList("all", "all")}
-        >
-          <div>
-            <span className="topic-name">All Topics</span>
-            <span className="topic-subtitle">{problems.length} records</span>
-          </div>
-          <span className="topic-count">{problems.length}</span>
-        </button>
-
-        <button
-          className={`topic-card ${selectedTopic === "revision" ? "active" : ""}`}
-          onClick={() => {
-            setSelectedTopic("revision");
-            setStatusFilter("revisit");
-            setMobileSidebarOpen(false);
-          }}
-        >
-          <div className="topic-dot revision-dot" />
-          <div className="topic-copy">
-            <span className="topic-name">Revision</span>
-            <span className="topic-subtitle">{dueRevisionProblems.length} due today</span>
-          </div>
-          <span className="topic-count">{dueRevisionProblems.length}</span>
-        </button>
-
-        <button
-          className={`topic-card ${selectedTopic === "general_notes" ? "active" : ""}`}
-          onClick={() => {
-            setSelectedTopic("general_notes");
-            setStatusFilter("all");
-            setMobileSidebarOpen(false);
-          }}
-          style={{
-            borderLeft: selectedTopic === "general_notes" ? "3px solid #38bdf8" : undefined,
-          }}
-        >
-          <div className="topic-dot" style={{ background: "#38bdf8" }} />
-          <div className="topic-copy">
-            <span className="topic-name">📓 General Notes</span>
-            <span className="topic-subtitle">Findings & Cheat-sheets</span>
-          </div>
-          <span className="topic-count" style={{ background: "rgba(56, 189, 248, 0.18)", color: "#38bdf8" }}>
-            {generalNotes.length}
-          </span>
-        </button>
-
-
-        <div className="topic-list">
-        {topics.map((topic) => {
-            const active = selectedTopic === topic._id;
-            const liveStats = topicStatsMap.get(topic._id) ?? { solved: 0, revisit: 0, total: 0 };
-            const slug = topic.slug;
-            const subCategories = topicSubCategories[slug] ?? [];
-            return (
-              <div key={topic._id} className="sidebar-topic-group">
-                <button
-                  className={`topic-card ${active ? "active" : ""}`}
-                  onClick={() => focusTopicList(topic._id, "all")}
-                >
-                  <div className="topic-dot" style={{ background: topic.accent }} />
-                  <div className="topic-copy">
-                    <span className="topic-name">{topic.name}</span>
-                    <span className="topic-subtitle">
-                      {liveStats.solved}/{liveStats.total} done
-                    </span>
-                  </div>
-                  <span className="topic-count">{liveStats.total}</span>
-                </button>
-                {subCategories.length > 0 ? (
-                  <div className="topic-subcategory-list" aria-label={`${topic.name} subtopics`}>
-                    {subCategories.map((sub) => (
-                      <div key={sub.id} className="topic-subcategory-item">
-                        {sub.label}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-
-      </aside>
+      <AppSidebar
+        isOpen={mobileSidebarOpen}
+        selectedTopic={selectedTopic}
+        selectedProblemSet={selectedProblemSet}
+        topics={topics}
+        problemCount={problems.length}
+        generalNotesCount={generalNotes.length}
+        dueRevisionCount={dueRevisionProblems.length}
+        topicStatsMap={topicStatsMap}
+        onOpen={() => setMobileSidebarOpen(true)}
+        onClose={() => setMobileSidebarOpen(false)}
+        onRefresh={() => void loadData()}
+        onProblemSetChange={setSelectedProblemSet}
+        onFocusTopic={focusTopicList}
+        onOpenRevision={() => {
+          setSelectedTopic("revision");
+          setStatusFilter("revisit");
+          setMobileSidebarOpen(false);
+        }}
+        onOpenGeneralNotes={() => {
+          setSelectedTopic("general_notes");
+          setStatusFilter("all");
+          setMobileSidebarOpen(false);
+        }}
+      />
 
       <main className="content">
-        <section className="hero">
-          <div>
-            <p className="eyebrow">DSA Tracker</p>
-            <h2>Track problems. Add notes.</h2>
-            <p className="hero-copy">Simple and clean.</p>
-          </div>
-
-          <div className="hero-actions">
-            <button className="primary-btn" onClick={() => openAddDrawer()}>
-              Add
-            </button>
-            <button
-              className={`secondary-btn ${editMode ? "active" : ""}`}
-              onClick={() => setEditMode((value) => !value)}
-            >
-              {editMode ? "Edit on" : "Edit off"}
-            </button>
-            <button className="secondary-btn" onClick={() => void loadData()}>
-              Refresh
-            </button>
-            <button
-              className="ghost-btn"
-              onClick={() => void handleExportData()}
-              disabled={exportingData}
-              title="Download full backup as JSON"
-            >
-              {exportingData ? "Exporting..." : "⬇ Export"}
-            </button>
-            <button className="ghost-btn" onClick={handleLogout}>
-              Logout
-            </button>
-          </div>
-        </section>
-
+        <AppHero
+          editMode={editMode}
+          exportingData={exportingData}
+          onAdd={() => openAddDrawer()}
+          onToggleEditMode={() => setEditMode((value) => !value)}
+          onRefresh={() => void loadData()}
+          onExport={() => void handleExportData()}
+          onLogout={handleLogout}
+        />
 
         {error ? <div className="banner error">{error}</div> : null}
 
@@ -1985,53 +1802,15 @@ export default function App() {
           />
         ) : (
           <>
-            <section className="stats-grid">
-          <StatCard
-            label="Total"
-            value={visibleStats?.totalProblems ?? 0}
-            hint={selectedTopic === "all" ? "All records" : "Topic records"}
-            onClick={() => setStatusFilter("all")}
-            isActive={statusFilter === "all"}
-          />
-          <StatCard
-            label="Solved"
-            value={visibleStats?.solvedProblems ?? 0}
-            hint={`${visibleProgress}% complete`}
-            onClick={() => setStatusFilter((prev) => (prev === "solved" ? "all" : "solved"))}
-            isActive={statusFilter === "solved"}
-          />
-          <StatCard
-            label="Revisit"
-            value={visibleStats?.revisitProblems ?? 0}
-            hint={selectedTopic === "all" ? "Starred for revisit" : "Topic starred"}
-            onClick={() => setStatusFilter((prev) => (prev === "revisit" ? "all" : "revisit"))}
-            isActive={statusFilter === "revisit"}
-          />
-          <StatCard
-            label="Unsolved"
-            value={visibleStats?.unsolvedProblems ?? 0}
-            hint={selectedTopic === "all" ? "Still pending" : "Topic pending"}
-            onClick={() => setStatusFilter((prev) => (prev === "unsolved" ? "all" : "unsolved"))}
-            isActive={statusFilter === "unsolved"}
-          />
-        </section>
-
-        {selectedTopic === "all" ? (
-          <section className="progress-panel">
-            <div>
-              <p className="panel-label">Overall progress</p>
-              <h3>{progress}% solved</h3>
-            </div>
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${progress}%` }} />
-            </div>
-            <div className="progress-meta">
-              <span>{stats?.solvedProblems ?? 0} solved</span>
-              <span>{stats?.revisitProblems ?? 0} revisit</span>
-              <span>{stats?.unsolvedProblems ?? 0} unsolved</span>
-            </div>
-          </section>
-        ) : null}
+            <DashboardStats
+              selectedTopic={selectedTopic}
+              stats={stats}
+              visibleStats={visibleStats}
+              progress={progress}
+              visibleProgress={visibleProgress}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+            />
 
         {selectedTopic === "revision" ? (
           <div className="revisit-subtabs-bar">
@@ -2138,294 +1917,41 @@ export default function App() {
           />
         ) : null}
 
+        {selectedTopic === "revision" && revisitSubTab === "heatmap" ? (
+          <AnalyticsDashboard
+            problems={problems}
+            activities={activities}
+            nowDate={nowDate}
+          />
+        ) : null}
+
+
         {selectedTopic === "revision" && (revisitSubTab === "queue" || revisitSubTab === "all") && showRevisionDashboard ? (
-          <section className="revision-panel revision-dashboard">
-            <div className="revision-dashboard-head">
-              <div>
-                <p className="panel-label">Spaced repetition ({activeSrsPreset.name})</p>
-                <h3>Revision queue</h3>
-                <p className="section-note">{revisionProblems.length} unique items scheduled · Pace: {activeSrsPreset.desc}</p>
-              </div>
-              <div className="revision-head-actions">
-                <button
-                  className="revision-action"
-                  disabled={!nextRevisionCandidate}
-                  onClick={() => {
-                    if (nextRevisionCandidate) {
-                      startRevisionPractice(nextRevisionCandidate);
-                    }
-                  }}
-                >
-                  Start next
-                </button>
-              </div>
-            </div>
-
-            <div className="revision-metrics">
-              <div className="revision-metric-card urgent">
-                <span>Due</span>
-                <strong>{filteredDueRevisionProblems.length}</strong>
-              </div>
-              <div className="revision-metric-card">
-                <span>Coming up</span>
-                <strong>{filteredSidebarRevisionProblems.length}</strong>
-              </div>
-              <div className="revision-metric-card done">
-                <span>Revised today</span>
-                <strong>{filteredRevisedTodayProblems.length}</strong>
-              </div>
-            </div>
-
-            <div className="revision-board">
-              <div className="revision-lane due-lane">
-                <div className="revision-lane-head">
-                  <span className="revision-lane-kicker">Now</span>
-                  <strong>Due to revise ({filteredDueRevisionProblems.length})</strong>
-                </div>
-                <div className="revision-list">
-                  {filteredDueRevisionProblems.length > 0 ? (
-                    (dueLaneExpanded ? filteredDueRevisionProblems : filteredDueRevisionProblems.slice(0, 5)).map(({ problem, state }) => {
-                      const isChecked = state.isComplete || completingRevisionIds.has(problem._id);
-                      return (
-                        <article key={problem._id} className={`revision-card ${state.isOverdue ? "overdue" : "due"}`}>
-                          <button
-                            className={`revision-check ${isChecked ? "checked" : ""}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void completeRevision(problem);
-                            }}
-                            aria-label="Mark revision complete"
-                            title="Mark done"
-                            disabled={completingRevisionIds.has(problem._id)}
-                          >
-                            {isChecked ? "✓" : ""}
-                          </button>
-                          <div className="revision-card-copy">
-                            <div className="revision-title-row">
-                              <strong>{problem.title}</strong>
-                              <button
-                                type="button"
-                                className="table-workspace-btn revision-workspace-btn"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleWorkspaceClick(problem);
-                                }}
-                                title="Open Problem Overview"
-                              >
-                                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
-                                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                                  <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                                </svg>
-                              </button>
-                            </div>
-                            <div className="revision-meta-row">
-                              <span>{state.subtitle}</span>
-                              <span>{problem.topic.name}</span>
-                              <span>{problem.difficulty}</span>
-                            </div>
-                          </div>
-                          <div className="revision-card-actions">
-                            <span className="revision-priority-pill">{getRevisionQueueMeta(problem, state).label}</span>
-                            <button
-                              className="revision-action ghost snooze-btn"
-                              title="Snooze 1 day"
-                              disabled={snoozingRevisionIds.has(problem._id)}
-                              onClick={(e) => { e.stopPropagation(); void snoozeRevision(problem, 1); }}
-                            >
-                              {snoozingRevisionIds.has(problem._id) ? "..." : "⏰ +1d"}
-                            </button>
-                            <button className="revision-action" onClick={() => openProblemLink(problem)}>
-                              Open
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })
-                  ) : revisedTodayProblems.length > 0 ? (
-                    // All caught up — celebratory empty state
-                    <div className="revision-empty revision-all-done">
-                      <span className="revision-done-icon">🎉</span>
-                      <strong>All caught up for today!</strong>
-                      <span>
-                        {sidebarRevisionProblems[0]
-                          ? `Next: ${sidebarRevisionProblems[0].state.subtitle} · ${sidebarRevisionProblems[0].problem.title}`
-                          : "No more revisions scheduled"}
-                      </span>
-                      {activityInsights.currentStreak > 0 ? (
-                        <span className="revision-done-streak">🔥 {activityInsights.currentStreak} day streak</span>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="revision-empty">No revision is due right now.</div>
-                  )}
-
-                  {filteredDueRevisionProblems.length > 5 ? (
-                    <button
-                      type="button"
-                      className="lane-show-more-btn"
-                      onClick={() => setDueLaneExpanded(!dueLaneExpanded)}
-                    >
-                      {dueLaneExpanded ? "Show Less" : `Show ${filteredDueRevisionProblems.length - 5} more...`}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="revision-lane">
-                <div className="revision-lane-head">
-                  <span className="revision-lane-kicker">Later</span>
-                  <strong>Coming up ({filteredSidebarRevisionProblems.length})</strong>
-                </div>
-                <div className="revision-list">
-                  {filteredSidebarRevisionProblems.length > 0 ? (() => {
-                    // Group by day bucket: Tomorrow / This week / Later
-                    const tomorrow: typeof filteredSidebarRevisionProblems = [];
-                    const thisWeek: typeof filteredSidebarRevisionProblems = [];
-                    const later: typeof filteredSidebarRevisionProblems = [];
-                    for (const item of filteredSidebarRevisionProblems) {
-                      const d = item.state.daysAway ?? 999;
-                      if (d <= 1) tomorrow.push(item);
-                      else if (d <= 7) thisWeek.push(item);
-                      else later.push(item);
-                    }
-                    const groups = [
-                      { label: "Tomorrow", items: tomorrow },
-                      { label: "This week", items: thisWeek },
-                      { label: "Later", items: later },
-                    ].filter((g) => g.items.length > 0);
-
-                    return groups.map((group) => (
-                      <div key={group.label} className="coming-up-group">
-                        <div className="coming-up-group-label">
-                          <span>{group.label}</span>
-                          <span className="coming-up-group-count">{group.items.length}</span>
-                        </div>
-                        {(comingUpLaneExpanded ? group.items : group.items.slice(0, 3)).map(({ problem, state }) => {
-                          const isChecked = completingRevisionIds.has(problem._id);
-                          return (
-                            <article key={problem._id} className="revision-card upcoming">
-                              <button
-                                className={`revision-check ${isChecked ? "checked" : ""}`}
-                                onClick={(event) => { event.stopPropagation(); void completeRevision(problem); }}
-                                aria-label="Mark revision complete"
-                                title="Mark done"
-                                disabled={completingRevisionIds.has(problem._id)}
-                              >
-                                {isChecked ? "✓" : ""}
-                              </button>
-                              <div className="revision-card-copy">
-                                <div className="revision-title-row">
-                                  <strong>{problem.title}</strong>
-                                  <button
-                                    type="button"
-                                    className="table-workspace-btn revision-workspace-btn"
-                                    onClick={(event) => { event.stopPropagation(); handleWorkspaceClick(problem); }}
-                                    title="Open Problem Overview"
-                                  >
-                                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
-                                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                                      <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                                    </svg>
-                                  </button>
-                                </div>
-                                <div className="revision-meta-row">
-                                  <span>{state.subtitle}</span>
-                                  <span>{problem.topic.name}</span>
-                                  <span>{problem.difficulty}</span>
-                                </div>
-                              </div>
-                              <div className="revision-card-actions">
-                                <span className="revision-priority-pill subtle">{getRevisionQueueMeta(problem, state).label}</span>
-                                <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
-                                  Open
-                                </button>
-                              </div>
-                            </article>
-                          );
-                        })}
-                        {!comingUpLaneExpanded && group.items.length > 3 ? (
-                          <div className="coming-up-overflow">
-                            +{group.items.length - 3} more in {group.label.toLowerCase()}
-                          </div>
-                        ) : null}
-                      </div>
-                    ));
-                  })() : (
-                    <div className="revision-empty">No upcoming revisions scheduled.</div>
-                  )}
-
-                  {filteredSidebarRevisionProblems.length > 0 ? (
-                    <button
-                      type="button"
-                      className="lane-show-more-btn"
-                      onClick={() => setComingUpLaneExpanded(!comingUpLaneExpanded)}
-                    >
-                      {comingUpLaneExpanded ? "Show less" : `Show all ${filteredSidebarRevisionProblems.length} coming up`}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="revision-lane revised-lane">
-                <div className="revision-lane-head">
-                  <span className="revision-lane-kicker">Session</span>
-                  <strong>Revised today ({filteredRevisedTodayProblems.length})</strong>
-                </div>
-                <div className="revision-list">
-                  {filteredRevisedTodayProblems.length > 0 ? (
-                    (revisedTodayLaneExpanded ? filteredRevisedTodayProblems : filteredRevisedTodayProblems.slice(0, 5)).map(({ problem, state }) => (
-                      <article key={problem._id} className="revision-card revised">
-                        <button className="revision-check checked" disabled aria-label="Revision completed">
-                          ✓
-                        </button>
-                        <div className="revision-card-copy">
-                          <div className="revision-title-row">
-                            <strong>{problem.title}</strong>
-                            <button
-                              type="button"
-                              className="table-workspace-btn revision-workspace-btn"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                handleWorkspaceClick(problem);
-                              }}
-                              title="Open Problem Overview"
-                            >
-                              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="workspace-icon">
-                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                                <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                              </svg>
-                            </button>
-                          </div>
-                          <div className="revision-meta-row">
-                            <span>Rev {problem.revisionCount} · Stage {problem.revisionStage ?? 0}/{activeSrsPreset.intervals.length}</span>
-                            <span>{problem.topic.name}</span>
-                          </div>
-                        </div>
-                        <div className="revision-card-actions">
-                          <span className="revision-priority-pill complete">Revised</span>
-                          <button className="revision-action ghost" onClick={() => openProblemLink(problem)}>
-                            Open
-                          </button>
-                        </div>
-                      </article>
-                    ))
-                  ) : (
-                    <div className="revision-empty">Today's completed revisions will appear here.</div>
-                  )}
-
-                  {filteredRevisedTodayProblems.length > 5 ? (
-                    <button
-                      type="button"
-                      className="lane-show-more-btn"
-                      onClick={() => setRevisedTodayLaneExpanded(!revisedTodayLaneExpanded)}
-                    >
-                      {revisedTodayLaneExpanded ? "Show Less" : `Show ${filteredRevisedTodayProblems.length - 5} more...`}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </section>
+          <RevisionDashboard
+            presetName={activeSrsPreset.name}
+            presetDesc={activeSrsPreset.desc}
+            intervalCount={activeSrsPreset.intervals.length}
+            revisionCount={revisionProblems.length}
+            dueItems={filteredDueRevisionProblems}
+            upcomingItems={filteredSidebarRevisionProblems}
+            revisedTodayItems={filteredRevisedTodayProblems}
+            allUpcomingItems={sidebarRevisionProblems}
+            nextRevisionCandidate={nextRevisionCandidate}
+            completingRevisionIds={completingRevisionIds}
+            snoozingRevisionIds={snoozingRevisionIds}
+            currentStreak={activityInsights.currentStreak}
+            dueLaneExpanded={dueLaneExpanded}
+            comingUpLaneExpanded={comingUpLaneExpanded}
+            revisedTodayLaneExpanded={revisedTodayLaneExpanded}
+            setDueLaneExpanded={setDueLaneExpanded}
+            setComingUpLaneExpanded={setComingUpLaneExpanded}
+            setRevisedTodayLaneExpanded={setRevisedTodayLaneExpanded}
+            onStartRevision={startRevisionPractice}
+            onOpenWorkspace={handleWorkspaceClick}
+            onCompleteRevision={(problem) => void completeRevision(problem)}
+            onSnoozeRevision={(problem, days) => void snoozeRevision(problem, days)}
+            onOpenLink={openProblemLink}
+          />
         ) : null}
 
         {activeProblem && !drawerOpen ? (
@@ -2451,161 +1977,40 @@ export default function App() {
           />
         ) : (
           <>
-        <section className="filters">
-          <input
-            className="search-input"
-            placeholder="Search problem, note, platform, or tag..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-
-          <select
-            value={sortByFilter}
-            onChange={(event) => setSortByFilter(event.target.value as SortByOption)}
-            title="Sort solving order"
-          >
-            <option value="optimal">🎯 Optimal Order (Best Sequence)</option>
-            <option value="status">📌 Unsolved First</option>
-            <option value="difficulty">⚡ Difficulty (Easy → Hard)</option>
-            <option value="rating">⭐ Highest Importance</option>
-            <option value="title">🔤 Title (A-Z)</option>
-          </select>
-
-
-          <select
-            value={difficultyFilter}
-            onChange={(event) => setDifficultyFilter(event.target.value as Difficulty | "all")}
-          >
-            <option value="all">All difficulty</option>
-            <option value="Easy">Easy</option>
-            <option value="Medium">Medium</option>
-            <option value="Hard">Hard</option>
-          </select>
-
-          <select
-            value={ratingFilter}
-            onChange={(event) => setRatingFilter(event.target.value as RatingFilterOption)}
-            title="Filter problems by rating"
-          >
-            <option value="all">All ratings ⭐</option>
-            <option value="10">10 ⭐ (Top Priority)</option>
-            <option value="8-9">8-9 ⭐ (High Priority)</option>
-            <option value="5-7">5-7 ⭐ (Medium)</option>
-          </select>
-
-          <button className="ghost-btn" onClick={() => openAddDrawer(selectedTopic !== "all" ? selectedTopic : undefined)}>
-            Quick add
-          </button>
-        </section>
-
-        <section className="problem-list">
-          <div className="section-heading">
-            <div>
-              <p className="panel-label">Problems</p>
-              <h3>{filteredProblems.length} records</h3>
-            </div>
-            <span className="section-note">{selectedTopicData ? selectedTopicData.name : selectedTopic === "revision" ? "Revision Queue" : "All"}</span>
-          </div>
-
-          {loading ? (
-            <div className="empty-state">Loading...</div>
-          ) : filteredProblems.length === 0 ? (
-            <div className="empty-state">No problems yet.</div>
-          ) : (
-            <div className="problem-table-container">
-              <table className="dsa-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: "90px" }}>Status</th>
-                    <th>Problem</th>
-                    <th style={{ width: "120px" }}>Importance</th>
-                    <th style={{ width: "100px" }}>Workspace</th>
-                    <th style={{ width: "80px" }}>Note</th>
-                    <th style={{ width: "90px" }}>Revision</th>
-                    <th style={{ width: "120px" }}>Difficulty</th>
-                    <th style={{ width: "125px" }}>Focus</th>
-                    <th style={{ width: "200px" }}>Meaning</th>
-                    {editMode ? <th style={{ width: "90px" }}>Actions</th> : null}
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedTopic === "all" || selectedTopic === "revision"
-                    ? groupedByTopicAndSection.map((group) => {
-                        const isExpanded = expandedTopics.has(group.topicId) || Boolean(deferredSearch.trim());
-                        return (
-                          <Fragment key={group.topicId}>
-                            <tr
-                              className="table-topic-header-row"
-                              onClick={() => toggleTopicExpanded(group.topicId)}
-                              style={{ cursor: "pointer" }}
-                            >
-                              <td colSpan={editMode ? 10 : 9} className="table-topic-header-cell">
-                                <div className="topic-header-content">
-                                  <span className="expand-arrow" style={{ color: group.accent }}>
-                                    {isExpanded ? "▼" : "▶"}
-                                  </span>
-                                  <span className="topic-name">{group.topicName}</span>
-                                  <span className="topic-stats-badge">
-                                    {statusFilter === "revisit"
-                                      ? `${group.totalCount} Revision items`
-                                      : `${group.solvedCount} / ${group.totalCount} Solved`}
-                                  </span>
-                                </div>
-                              </td>
-                            </tr>
-
-                            {isExpanded
-                              ? group.sections.map((sectionGroup) => (
-                                  <SectionBlock
-                                    key={sectionGroup.sectionKey}
-                                    group={sectionGroup}
-                                    accent={group.accent}
-                                    canEdit={editMode}
-                                    revisionStateMap={revisionStateMap}
-                                    problemCategoryMap={problemCategoryMap}
-                                    nowDate={nowDate}
-                                    onOpenStudy={handleWorkspaceClick}
-                                    onToggleStatus={updateStatus}
-                                    onOpenEdit={openEditDrawer}
-                                    onTogglePin={togglePin}
-                                    onOpenLink={openProblemLink}
-                                    onDelete={deleteProblem}
-                                    rowLimit={sectionRowLimit}
-                                    onLoadMore={() => setSectionRowLimit((value) => value + 30)}
-                                    isRevisitView={statusFilter === "revisit"}
-                                  />
-                                ))
-                              : null}
-                          </Fragment>
-                        );
-                      })
-                    : groupedByTopicAndSection.flatMap((group) =>
-                        group.sections.map((sectionGroup) => (
-                          <SectionBlock
-                            key={sectionGroup.sectionKey}
-                            group={sectionGroup}
-                            accent={group.accent}
-                            canEdit={editMode}
-                            revisionStateMap={revisionStateMap}
-                            problemCategoryMap={problemCategoryMap}
-                            nowDate={nowDate}
-                            onOpenStudy={handleWorkspaceClick}
-                            onToggleStatus={updateStatus}
-                            onOpenEdit={openEditDrawer}
-                            onTogglePin={togglePin}
-                            onOpenLink={openProblemLink}
-                            onDelete={deleteProblem}
-                            rowLimit={sectionRowLimit}
-                            onLoadMore={() => setSectionRowLimit((value) => value + 30)}
-                            isRevisitView={statusFilter === "revisit"}
-                          />
-                        ))
-                      )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+            <ProblemListView
+              search={search}
+              sortByFilter={sortByFilter}
+              difficultyFilter={difficultyFilter}
+              ratingFilter={ratingFilter}
+              selectedTopic={selectedTopic}
+              selectedTopicName={selectedTopicData?.name ?? null}
+              statusFilter={statusFilter}
+              filteredProblemCount={filteredProblems.length}
+              groupedByTopicAndSection={groupedByTopicAndSection}
+              loading={loading}
+              editMode={editMode}
+              expandedTopics={expandedTopics}
+              deferredSearch={deferredSearch}
+              revisionStateMap={revisionStateMap}
+              problemCategoryMap={problemCategoryMap}
+              nowDate={nowDate}
+              justSolvedIds={justSolvedIds}
+              kbFocusedId={kbFocusedId}
+              sectionRowLimit={sectionRowLimit}
+              setSearch={setSearch}
+              setSortByFilter={setSortByFilter}
+              setDifficultyFilter={setDifficultyFilter}
+              setRatingFilter={setRatingFilter}
+              setSectionRowLimit={setSectionRowLimit}
+              onQuickAdd={() => openAddDrawer(selectedTopic !== "all" ? selectedTopic : undefined)}
+              onToggleTopicExpanded={toggleTopicExpanded}
+              onOpenStudy={handleWorkspaceClick}
+              onToggleStatus={updateStatus}
+              onOpenEdit={openEditDrawer}
+              onTogglePin={togglePin}
+              onOpenLink={openProblemLink}
+              onDelete={deleteProblem}
+            />
           </>
         )}
           </>

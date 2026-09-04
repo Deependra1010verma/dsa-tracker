@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { type RequestHandler } from "express";
 import path from "path";
+import crypto from "crypto";
 import { existsSync } from "fs";
 import { connectDb } from "./db.js";
 import { Activity, Problem, Topic, topicSeeds, GeneralNoteModelExport } from "./models.js";
@@ -288,14 +289,68 @@ let databaseReady = false;
 let databaseError = "";
 let databaseInitPromise: Promise<void> | null = null;
 
+function getServerAuthCredentials() {
+  const username = (process.env.USERNAME || process.env.LOGIN_USERNAME || "").trim();
+  const password = process.env.PASSWORD || process.env.LOGIN_PASSWORD || "";
+  return { username, password, isConfigured: Boolean(username && password) };
+}
+
+const AUTH_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET || "dsa-tracker-hmac-secret-key-2026";
+
+function generateAuthToken(username: string): string {
+  const timestamp = Date.now();
+  const payload = `${username}:${timestamp}`;
+  const signature = crypto.createHmac("sha256", AUTH_SECRET).update(payload).digest("hex");
+  return Buffer.from(`${payload}:${signature}`).toString("base64url");
+}
+
+function verifyAuthToken(token: string): boolean {
+  if (!token) return false;
+  try {
+    const decoded = Buffer.from(token, "base64url").toString("utf-8");
+    const lastColonIdx = decoded.lastIndexOf(":");
+    if (lastColonIdx === -1) return false;
+    const payload = decoded.substring(0, lastColonIdx);
+    const signature = decoded.substring(lastColonIdx + 1);
+
+    const expectedSig = crypto.createHmac("sha256", AUTH_SECRET).update(payload).digest("hex");
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+      return false;
+    }
+
+    const firstColonIdx = payload.indexOf(":");
+    if (firstColonIdx === -1) return false;
+    const username = payload.substring(0, firstColonIdx);
+    const { username: configUser, isConfigured } = getServerAuthCredentials();
+    if (isConfigured && username !== configUser) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 app.use(express.json({ limit: "2mb" }));
 
 app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Auth-Token");
+
   if (req.method === "OPTIONS") {
-    res.sendStatus(200);
+    res.sendStatus(204);
     return;
   }
   next();
@@ -417,6 +472,67 @@ app.use(
   })
 );
 
+// Auth endpoints
+app.get("/api/auth/status", (_req, res) => {
+  const { isConfigured, username } = getServerAuthCredentials();
+  res.json({ isConfigured, usernameConfigured: Boolean(username) });
+});
+
+app.post("/api/auth/login", (req, res) => {
+  const { username, password } = req.body ?? {};
+  const creds = getServerAuthCredentials();
+
+  if (!creds.isConfigured) {
+    const token = generateAuthToken(username || "user");
+    res.json({ success: true, token, username: username || "user" });
+    return;
+  }
+
+  const inputUser = typeof username === "string" ? username.trim() : "";
+  const inputPass = typeof password === "string" ? password : "";
+
+  if (inputUser === creds.username && inputPass === creds.password) {
+    const token = generateAuthToken(creds.username);
+    res.json({ success: true, token, username: creds.username });
+  } else {
+    setTimeout(() => {
+      res.status(401).json({ message: "Invalid username or password" });
+    }, 400);
+  }
+});
+
+app.get("/api/auth/check", (req, res) => {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : (req.headers["x-auth-token"] as string) || "";
+  const isValid = verifyAuthToken(token);
+  if (isValid) {
+    res.json({ valid: true });
+  } else {
+    res.status(401).json({ valid: false, message: "Invalid or expired token" });
+  }
+});
+
+// Protected route middleware
+app.use("/api", (req, res, next) => {
+  if (req.path.startsWith("/auth/") || req.path === "/health") {
+    return next();
+  }
+
+  const creds = getServerAuthCredentials();
+  if (!creds.isConfigured) {
+    return next();
+  }
+
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : (req.headers["x-auth-token"] as string) || "";
+
+  if (verifyAuthToken(token)) {
+    return next();
+  }
+
+  res.status(401).json({ message: "Authentication required. Please log in." });
+});
+
 function normalizeSearch(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -446,8 +562,8 @@ function startRevisionSchedule(problem: any, anchorOverride?: Date) {
   initializeRevisionSchedule(problem, anchorOverride);
 }
 
-function isRevisionActiveStatus(status: unknown): status is "solved" | "revisit" {
-  return status === "solved" || status === "revisit";
+function isRevisionActiveStatus(status: unknown): status is "solved" | "revisit" | "shaky" {
+  return status === "solved" || status === "revisit" || status === "shaky";
 }
 
 function syncRevisionScheduleForStatus(problem: any, previousStatus: unknown, now: Date) {
@@ -680,7 +796,7 @@ function seedProblemToMemoryProblem(seed: (typeof allProblemSeeds)[number]): Mem
   }
 
   const now = new Date();
-  const isSolvedLike = seed.status === "solved" || seed.status === "revisit";
+  const isSolvedLike = isRevisionActiveStatus(seed.status);
   const solvedAt = seed.status === "solved" ? now : undefined;
   const revisitAt = seed.status === "revisit" ? now : undefined;
 
@@ -1045,9 +1161,9 @@ async function ensureSeedProblems() {
           revisionStage: 0,
           solvedAt: seed.status === "solved" ? new Date() : undefined,
           revisitAt: seed.status === "revisit" ? new Date() : undefined,
-          lastRevisionAt: seed.status === "solved" || seed.status === "revisit" ? new Date() : undefined,
+          lastRevisionAt: isRevisionActiveStatus(seed.status) ? new Date() : undefined,
           nextRevisionAt:
-            seed.status === "solved" || seed.status === "revisit" ? addDays(new Date(), revisionIntervalsDays[0] ?? 1) : undefined,
+            isRevisionActiveStatus(seed.status) ? addDays(new Date(), revisionIntervalsDays[0] ?? 1) : undefined,
         },
       },
       upsert: true,
@@ -1096,7 +1212,7 @@ async function ensureSeedGeneralNotes() {
 
 
 function statusFromValue(value: unknown): ProblemStatus | "" {
-  return value === "solved" || value === "unsolved" || value === "revisit" || value === "skipped"
+  return value === "solved" || value === "unsolved" || value === "revisit" || value === "shaky" || value === "skipped"
     ? value
     : "";
 }
@@ -1543,7 +1659,7 @@ app.post(
       }
 
       const now = new Date();
-      const isSolvedLike = status === "solved" || status === "revisit";
+      const isSolvedLike = isRevisionActiveStatus(status);
       const problem: MemoryProblem = {
         _id: memoryProblemId(topic.slug, title),
         problemKey: problemKeyForSeed(topic.slug, title),
@@ -1598,7 +1714,7 @@ app.post(
     }
 
     const now = new Date();
-    const isSolvedLike = status === "solved" || status === "revisit";
+    const isSolvedLike = isRevisionActiveStatus(status);
     const solvedAt = status === "solved" ? now : undefined;
     const revisitAt = status === "revisit" ? now : undefined;
 

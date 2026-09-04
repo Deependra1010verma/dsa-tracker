@@ -402,9 +402,31 @@ button {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   min-width: 0;
+}
+
+.problem-set-picker {
+  padding: 0 1rem;
+  margin: -0.5rem 0 1rem;
+}
+
+.problem-set-picker select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  outline: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.problem-set-picker option {
+  background-color: var(--bg);
+  color: var(--text);
 }
 
 .stat-card,
@@ -2919,6 +2941,12 @@ textarea {
   color: #64748b;
   font-weight: 600;
   min-width: 20px;
+}
+
+.table-problem-row.row-kb-focused {
+  outline: 2px solid rgba(96, 165, 250, 0.7);
+  outline-offset: -2px;
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .status-checkbox {
@@ -6157,4 +6185,293 @@ a.problem-title-text {
   margin: 0;
   max-height: 200px;
   overflow: auto;
+}
+
+/* ── Shaky Status ──────────────────────────────────────── */
+.status-shaky {
+  color: #fbbf24;
+}
+
+/* Shaky checkbox — amber tint instead of green */
+.status-checkbox.shaky {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.checkbox-shaky-dot {
+  font-size: 1rem;
+  font-weight: 900;
+  color: #fbbf24;
+  line-height: 1;
+  user-select: none;
+}
+
+/* ── Solve Flash Animation ─────────────────────────────── */
+@keyframes row-solve-flash {
+  0%   { background: rgba(34, 197, 94, 0.0);  box-shadow: none; }
+  20%  { background: rgba(34, 197, 94, 0.18); box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35); }
+  60%  { background: rgba(34, 197, 94, 0.10); box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18); }
+  100% { background: rgba(34, 197, 94, 0.0);  box-shadow: none; }
+}
+
+.row-just-solved {
+  animation: row-solve-flash 1.6s ease-out forwards;
+}
+
+/* ── Analytics Dashboard ────────────────────────────────────── */
+.analytics-dashboard {
+  display: grid;
+  gap: 20px;
+  padding: 0 0 32px;
+}
+
+.analytics-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 22px 24px;
+  display: grid;
+  gap: 20px;
+}
+
+.analytics-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.analytics-card-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.analytics-card-head h4 {
+  margin: 0 0 3px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.analytics-card-sub {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.analytics-empty {
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* Platform Stats */
+.platform-stats-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.platform-stat-row {
+  display: grid;
+  grid-template-columns: 160px 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.platform-stat-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.platform-stat-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.platform-stat-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.platform-stat-bar-shell {
+  height: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 99px;
+  overflow: hidden;
+  position: relative;
+}
+
+.platform-stat-bar-track {
+  height: 100%;
+  display: flex;
+  border-radius: 99px;
+  overflow: hidden;
+  transition: width 0.5s ease;
+}
+
+.platform-stat-bar {
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+.platform-stat-bar.solved {
+  background: linear-gradient(90deg, #22c55e, #16a34a);
+}
+
+.platform-stat-bar.shaky {
+  background: linear-gradient(90deg, #fbbf24, #d97706);
+}
+
+.platform-diff-chips {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pdiff-chip {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 99px;
+}
+
+.pdiff-chip.easy   { background: rgba(34, 197, 94, 0.15);  color: #86efac; }
+.pdiff-chip.medium { background: rgba(251, 191, 36, 0.15); color: #fde68a; }
+.pdiff-chip.hard   { background: rgba(239, 68, 68, 0.15);  color: #fca5a5; }
+
+.platform-stat-legend,
+.diff-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 0.73rem;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.legend-dot.solved   { background: #22c55e; }
+.legend-dot.shaky    { background: #fbbf24; }
+.legend-dot.unsolved { background: rgba(255,255,255,0.15); }
+.legend-dot.easy     { background: #22c55e; }
+.legend-dot.medium   { background: #fbbf24; }
+.legend-dot.hard     { background: #ef4444; }
+
+/* Revision Load Chart */
+.revision-load-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 120px;
+  padding-bottom: 28px;
+  position: relative;
+}
+
+.load-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.load-bar-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+  min-height: 18px;
+}
+
+.load-bar-track {
+  width: 100%;
+  height: 80px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px 6px 0 0;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.load-bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #818cf8, #6366f1);
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+  transition: height 0.5s ease;
+}
+
+.load-bar-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+  position: absolute;
+  bottom: 0;
+}
+
+/* Difficulty Progression */
+.difficulty-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 140px;
+  padding-bottom: 32px;
+  position: relative;
+}
+
+.diff-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.diff-bar-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+  min-height: 18px;
+}
+
+.diff-bar-stack {
+  width: 100%;
+  height: 88px;
+  display: flex;
+  flex-direction: column-reverse;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+}
+
+.diff-bar {
+  width: 100%;
+  min-height: 0;
+  transition: height 0.5s ease;
+  flex-shrink: 0;
+}
+
+.diff-bar.easy   { background: #22c55e; }
+.diff-bar.medium { background: #fbbf24; }
+.diff-bar.hard   { background: #ef4444; }
+
+.diff-bar-label {
+  font-size: 0.66rem;
+  color: var(--muted);
+  white-space: nowrap;
+  position: absolute;
+  bottom: 0;
 }

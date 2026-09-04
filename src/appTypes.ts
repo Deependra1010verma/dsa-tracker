@@ -1,7 +1,7 @@
 import type { PatternFamilyItem, Prerequisite } from "./api/types";
 
 export type Difficulty = "Easy" | "Medium" | "Hard";
-export type Status = "unsolved" | "solved" | "revisit" | "skipped";
+export type Status = "unsolved" | "solved" | "revisit" | "shaky" | "skipped";
 export type SortByOption = "optimal" | "status" | "difficulty" | "rating" | "title";
 
 export type Topic = {
@@ -61,6 +61,8 @@ export type Stats = {
   totalProblems: number;
   solvedProblems: number;
   revisitProblems: number;
+  revisitStatusCount?: number;
+  shakyProblems: number;
   unsolvedProblems: number;
   skippedProblems: number;
 };
@@ -197,6 +199,7 @@ export type PersistedViewState = {
   selectedTopic?: string;
   selectedProblemSet?: string;
   activeProblemId?: string | null;
+  activeWorkspaceMode?: "drawer" | "study" | null;
   drawerOpen?: boolean;
   drawerMode?: "edit" | "notes";
 };
@@ -217,4 +220,3 @@ export type SavedProblemProgress = {
 };
 
 export type LocalProgressMap = Record<string, SavedProblemProgress>;
-

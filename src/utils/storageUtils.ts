@@ -11,9 +11,28 @@ import { toDateKey } from "./activityUtils";
 import { getRevisionState } from "./problemUtils";
 
 export const AUTH_STORAGE_KEY = "dsa-tracker-authenticated";
+export const AUTH_TOKEN_KEY = "dsa-tracker-auth-token";
 export const APP_VIEW_STATE_KEY = "dsa-tracker-view-state";
 export const LOCAL_PROGRESS_STORAGE_KEY = "dsa-tracker-local-user-progress";
 export const LOCAL_ACTIVITY_STORAGE_PREFIX = "dsa-tracker-activity-history";
+
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(AUTH_TOKEN_KEY) || window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function clearAuthToken() {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.localStorage.removeItem(AUTH_STORAGE_KEY);
+}
 
 export function readPersistedViewState(): PersistedViewState {
   if (typeof window === "undefined") {
@@ -151,7 +170,7 @@ export function withStatusSchedule(problem: Problem, nextStatus: Status, nowDate
     nextProblem.revisitAt = nowDate.toISOString();
   }
 
-  if ((nextStatus === "solved" || nextStatus === "revisit") && previousStatus !== nextStatus) {
+  if ((nextStatus === "solved" || nextStatus === "revisit" || nextStatus === "shaky") && previousStatus !== nextStatus) {
     initializeRevisionSchedule(nextProblem, nowDate, intervals);
   } else if (nextStatus === "unsolved" || nextStatus === "skipped") {
     clearRevisionSchedule(nextProblem);
@@ -274,13 +293,11 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const timeoutId = setTimeout(() => controller.abort(), 30_000); // 30s timeout
 
   // Merge the caller's signal with the internal timeout signal so both are honoured.
-  // AbortSignal.any() is well-supported in modern browsers but we fall back for safety.
   let signal: AbortSignal;
   if (init?.signal) {
     if (typeof AbortSignal.any === "function") {
       signal = AbortSignal.any([init.signal, controller.signal]);
     } else {
-      // Manual fallback: abort the internal controller when the caller's signal fires.
       const callerSignal = init.signal;
       if (callerSignal.aborted) {
         controller.abort();
@@ -293,15 +310,28 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     signal = controller.signal;
   }
 
+  const token = getAuthToken();
+  const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
   try {
     const response = await fetch(path, {
+      ...init,
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
         ...(init?.headers ?? {}),
       },
-      ...init,
       signal,
     });
+
+    if (response.status === 401) {
+      clearAuthToken();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("dsa-unauthorized"));
+      }
+      const error = await response.json().catch(() => ({ message: "Unauthorized access" }));
+      throw new Error(error.message || "Unauthorized access");
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: "Request failed" }));

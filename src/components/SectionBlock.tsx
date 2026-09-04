@@ -16,6 +16,8 @@ export type SectionBlockProps = {
   revisionStateMap: Map<string, RevisionState>;
   problemCategoryMap: Map<string, string[]>;
   nowDate: Date;
+  justSolvedIds: Set<string>;
+  kbFocusedId: string | null;
   onOpenStudy: (problem: Problem) => void;
   onToggleStatus: (problem: Problem, nextStatus: Status) => void;
   onOpenEdit: (problem: Problem) => void;
@@ -34,6 +36,8 @@ export const SectionBlock = memo(function SectionBlock({
   revisionStateMap,
   problemCategoryMap,
   nowDate,
+  justSolvedIds,
+  kbFocusedId,
   onOpenStudy,
   onToggleStatus,
   onOpenEdit,
@@ -69,6 +73,8 @@ export const SectionBlock = memo(function SectionBlock({
           canEdit={canEdit}
           revisionState={revisionStateMap.get(problem._id) ?? getRevisionState(problem, nowDate)}
           categories={problemCategoryMap.get(problem._id) ?? getProblemCategories(problem)}
+          justSolved={justSolvedIds.has(problem._id)}
+          isFocused={kbFocusedId === problem._id}
           onOpenStudy={onOpenStudy}
           onToggleStatus={onToggleStatus}
           onOpenEdit={onOpenEdit}

@@ -8,6 +8,8 @@ export type ProblemRowProps = {
   canEdit: boolean;
   revisionState: RevisionState;
   categories: string[];
+  justSolved?: boolean;
+  isFocused?: boolean;
   onOpenStudy: (problem: Problem) => void;
   onToggleStatus: (problem: Problem, nextStatus: Status) => void;
   onOpenEdit: (problem: Problem) => void;
@@ -21,6 +23,8 @@ export const ProblemRow = memo(function ProblemRow({
   displayIndex,
   canEdit,
   categories,
+  justSolved,
+  isFocused,
   onOpenStudy,
   onToggleStatus,
   onOpenEdit,
@@ -30,22 +34,39 @@ export const ProblemRow = memo(function ProblemRow({
 }: ProblemRowProps) {
   const hasNote = hasNoteContent(problem);
 
+  function nextStatusCycle(current: Status): Status {
+    if (current === "unsolved") return "shaky";
+    if (current === "shaky") return "solved";
+    if (current === "solved") return "unsolved";
+    return "solved";
+  }
+
   return (
-    <tr className="table-problem-row">
+    <tr
+      className={`table-problem-row${justSolved ? " row-just-solved" : ""}${isFocused ? " row-kb-focused" : ""}`}
+      data-pid={problem._id}
+    >
       <td className="status-col">
         <div className="status-cell-content">
           <span className="row-index-num">{displayIndex}</span>
           <button
             type="button"
-            className={`status-checkbox ${problem.status === "solved" ? "checked" : ""}`}
+            className={`status-checkbox${problem.status === "solved" ? " checked" : problem.status === "shaky" ? " shaky" : ""}`}
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
-              onToggleStatus(problem, problem.status === "solved" ? "unsolved" : "solved");
+              onToggleStatus(problem, nextStatusCycle(problem.status));
             }}
             aria-label="Toggle status"
+            title={
+              problem.status === "unsolved"
+                ? "Mark shaky"
+                : problem.status === "shaky" || problem.status === "revisit" || problem.status === "skipped"
+                ? "Mark solved"
+                : "Mark unsolved"
+            }
           >
-            {problem.status === "solved" ? <span className="checkbox-inner-dot" /> : null}
+            {problem.status === "solved" ? <span className="checkbox-inner-dot" /> : problem.status === "shaky" ? <span className="checkbox-shaky-dot">~</span> : null}
           </button>
         </div>
       </td>
