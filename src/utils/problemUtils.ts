@@ -254,6 +254,7 @@ export function getProblemCategories(problem: Problem): string[] {
 
 export function hasNoteContent(problem: Problem | null | undefined): boolean {
   if (!problem) return false;
+  if (typeof problem.hasNotes === "boolean") return problem.hasNotes;
   const { trigger, reason, fix } = splitMistakeLog(problem.mistakeLog);
   const resolvedTrigger = problem.mistakeTrigger ?? trigger;
   const resolvedReason = problem.mistakeReason ?? reason;

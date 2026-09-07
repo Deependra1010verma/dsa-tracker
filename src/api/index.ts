@@ -886,6 +886,7 @@ function appendMemoryActivity(problem: MemoryProblem, kind: ActivityKind, occurr
 }
 
 function toMemoryProblemResponse(problem: MemoryProblem, brief = false) {
+  const hasNotes = hasUserProblemNotes(problem);
   const response: Record<string, unknown> = {
     _id: problem._id,
     title: problem.title,
@@ -896,6 +897,7 @@ function toMemoryProblemResponse(problem: MemoryProblem, brief = false) {
     roadmapOrder: problem.roadmapOrder,
     difficulty: problem.difficulty,
     status: problem.status,
+    hasNotes,
     shortNote: problem.shortNote,
     longNote: brief ? undefined : problem.longNote,
     codeSnippet: brief ? undefined : problem.codeSnippet,
@@ -926,6 +928,39 @@ function toMemoryProblemResponse(problem: MemoryProblem, brief = false) {
   };
 
   return response;
+}
+
+const problemNoteFields = [
+  "shortNote",
+  "longNote",
+  "codeSnippet",
+  "mistakeLog",
+  "mistakeTrigger",
+  "mistakeReason",
+  "mistakeFix",
+  "compareBruteForce",
+  "compareOptimized",
+  "compareWhyBetter",
+] as const;
+
+function normalizedText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function hasUserProblemNotes(problem: Partial<MemoryProblem> & { problemKey?: string; topic?: { slug?: string } }) {
+  const seed = allProblemSeeds.find((entry) =>
+    problem.problemKey
+      ? problemKeyForSeed(entry.topicSlug, entry.title) === problem.problemKey
+      : entry.topicSlug === problem.topic?.slug && entry.title === problem.title
+  );
+  const seedRecord = seed as Record<string, unknown> | undefined;
+
+  return problemNoteFields.some((field) => {
+    const currentValue = normalizedText(problem[field]);
+    if (!currentValue) return false;
+    if (!seedRecord) return true;
+    return currentValue !== normalizedText(seedRecord[field]);
+  });
 }
 
 function toMemoryActivityResponse(activity: MemoryActivity) {
@@ -1404,7 +1439,7 @@ app.get(
 
     if (brief) {
       query.select(
-        "title topic platformName platformUrl roadmapSection roadmapSectionOrder roadmapOrder difficulty status shortNote pattern rating revisionCount revisionStage solvedAt revisitAt lastRevisionAt nextRevisionAt revisionCompletedAt prerequisites tags priority isPinned updatedAt"
+        "problemKey isSeeded title topic platformName platformUrl roadmapSection roadmapSectionOrder roadmapOrder difficulty status shortNote longNote codeSnippet codeSnippetLang mistakeLog mistakeTrigger mistakeReason mistakeFix invariant compareBruteForce compareOptimized compareWhyBetter pattern rating revisionCount revisionStage solvedAt revisitAt lastRevisionAt nextRevisionAt revisionCompletedAt prerequisites tags priority isPinned updatedAt"
       );
     }
 
@@ -1417,7 +1452,30 @@ app.get(
       return true;
     });
 
-    res.json({ problems });
+    const responseProblems = problems.map((problem: any) => {
+      const response = {
+        ...problem,
+        hasNotes: hasUserProblemNotes(problem),
+      };
+
+      if (brief) {
+        delete response.longNote;
+        delete response.codeSnippet;
+        delete response.codeSnippetLang;
+        delete response.mistakeLog;
+        delete response.mistakeTrigger;
+        delete response.mistakeReason;
+        delete response.mistakeFix;
+        delete response.invariant;
+        delete response.compareBruteForce;
+        delete response.compareOptimized;
+        delete response.compareWhyBetter;
+      }
+
+      return response;
+    });
+
+    res.json({ problems: responseProblems });
   })
 );
 

@@ -3134,6 +3134,16 @@ a.problem-title-text {
   color: #7dd3fc;
 }
 
+.table-workspace-btn.has-note,
+.table-workspace-btn.has-note .workspace-icon {
+  color: #22c55e;
+}
+
+.table-workspace-btn.has-note:hover,
+.table-workspace-btn.has-note:hover .workspace-icon {
+  color: #4ade80;
+}
+
 .table-note-btn {
   background: transparent;
   border: none;

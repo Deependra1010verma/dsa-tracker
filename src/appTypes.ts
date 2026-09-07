@@ -27,6 +27,7 @@ export type Problem = {
   roadmapOrder?: number;
   difficulty: Difficulty;
   status: Status;
+  hasNotes?: boolean;
   pattern?: string;
   invariant?: string;
   compareBruteForce?: string;
