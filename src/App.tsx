@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Prerequisite, PatternFamilyItem, GeneralNote } from "./api/types";
 import { GeneralNotesView } from "./components/GeneralNotesView";
 import { GeneralNoteModal } from "./components/GeneralNoteModal";
@@ -23,12 +23,6 @@ import type {
 
 import {
   toDateKey,
-  fromDateKey,
-  getWeekdayIndex,
-  daysBetween,
-  formatActivityDate,
-  formatActivityLevel,
-  createEmptyInsights,
   buildActivityInsights,
 } from "./utils/activityUtils";
 
@@ -44,7 +38,6 @@ import {
 import {
   AUTH_STORAGE_KEY,
   APP_VIEW_STATE_KEY,
-  LOCAL_PROGRESS_STORAGE_KEY,
   readPersistedViewState,
   readLocalProgress,
   saveLocalProgressItem,
@@ -70,7 +63,6 @@ import {
 import { NotesPreviewModal } from "./components/NotesPreviewModal";
 import { ActivityInsightsPanel } from "./components/ActivityInsightsPanel";
 import { AnalyticsDashboard } from "./components/AnalyticsDashboard";
-import { ProblemPrerequisitesSection, PatternFamilySection } from "./components/PrerequisitesSections";
 import { ProblemWorkspaceView } from "./components/ProblemWorkspaceView";
 import { ProblemDrawer } from "./components/ProblemDrawer";
 import { AuthView } from "./components/AuthView";
@@ -109,18 +101,6 @@ const emptyForm: ProblemFormState = {
   isPinned: false,
 };
 
-const statusLabels: Record<Status, string> = {
-  unsolved: "Unsolved",
-  solved: "Solved",
-  revisit: "Revisit",
-  skipped: "Skipped",
-};
-
-const difficultyTone: Record<Difficulty, string> = {
-  Easy: "tone-easy",
-  Medium: "tone-medium",
-  Hard: "tone-hard",
-};
 
 export default function App() {
   const [loginConfigured, setLoginConfigured] = useState(true);
@@ -1398,7 +1378,7 @@ export default function App() {
     } finally {
       setSaving(false);
     }
-  }, [activeProblem, appendProblem, drawerOpen, form, setError, setSaving, setDrawerOpen, setActiveProblem, setForm, syncFormFromProblem, upsertProblem]);
+  }, [activeProblem, appendProblem, drawerOpen, form, loadData, setError, setSaving, setDrawerOpen, setActiveProblem, setForm, syncFormFromProblem, upsertProblem]);
 
   useEffect(() => {
     if (!activeProblem || drawerOpen) {
@@ -1693,7 +1673,7 @@ export default function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete problem");
     }
-  }, [activeProblem, problems, removeProblem, setDrawerOpen, setActiveProblem, setError]);
+  }, [activeProblem, loadData, problems, removeProblem, setDrawerOpen, setActiveProblem, setError]);
 
   const togglePin = useCallback(async (problem: Problem) => {
     const seq = nextMutationSeq(problem._id);

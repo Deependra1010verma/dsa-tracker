@@ -7,6 +7,7 @@ export type DashboardStatsValue = {
   solvedProblems: number;
   revisitProblems: number;
   unsolvedProblems: number;
+  skippedProblems?: number;
 };
 
 type DashboardStatsProps = {

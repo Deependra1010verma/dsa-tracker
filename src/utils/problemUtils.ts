@@ -92,7 +92,7 @@ export function getRevisionState(problem: Problem, now: Date, intervals?: number
 
   return {
     stage: derived.stage,
-    label: derived.isComplete ? "Revision complete" : nextStep === 1 ? "1 day" : `${nextStep} days`,
+    label: derived.isComplete ? "Revision complete" : nextStep === null ? "Scheduled" : nextStep === 1 ? "1 day" : `${nextStep} days`,
     subtitle: formatRevisionDueText(derived.daysAway, derived.isDue, derived.isComplete),
     dueDate: derived.dueDate,
     isDue: derived.isDue,

@@ -57,13 +57,7 @@ export const ProblemRow = memo(function ProblemRow({
               onToggleStatus(problem, nextStatusCycle(problem.status));
             }}
             aria-label="Toggle status"
-            title={
-              problem.status === "unsolved"
-                ? "Mark solved"
-                : problem.status === "revisit" || problem.status === "skipped"
-                ? "Mark solved"
-                : "Mark unsolved"
-            }
+            title={problem.status === "solved" ? "Mark unsolved" : "Mark solved"}
           >
             {problem.status === "solved" ? <span className="checkbox-inner-dot" /> : null}
           </button>

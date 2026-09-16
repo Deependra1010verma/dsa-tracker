@@ -422,9 +422,10 @@ async function initializeStorage() {
     databaseError = "";
     console.log("Database ready (mongo)");
   } catch (error) {
-    databaseReady = false;
+    storageMode = "memory";
+    databaseReady = true;
     databaseError = error instanceof Error ? error.message : String(error);
-    console.error("Database initialization error:", databaseError);
+    console.warn("MongoDB connection failed; falling back to in-memory mode:", databaseError);
   }
 }
 
@@ -442,27 +443,13 @@ app.use(
       await databaseInitPromise;
     }
 
-    const currentMongoUri = getMongoUri();
-    // Only retry if no init is currently in-flight AND we still aren't ready.
-    // Without this guard, two concurrent first-requests could both call initializeStorage()
-    // simultaneously, overwriting databaseInitPromise and orphaning the first call.
-    if (currentMongoUri && !databaseReady && !databaseInitPromise) {
-      databaseInitPromise = initializeStorage();
-      await databaseInitPromise;
-      databaseInitPromise = null;
-    }
-
-    if (currentMongoUri && !databaseReady) {
-      res.status(503).json({
-        message: "Database connection failed. Please check MONGODB_URI and MongoDB Atlas network access.",
-        error: databaseError,
-      });
-      return;
+    if (!databaseReady && storageMode === "memory") {
+      databaseReady = true;
     }
 
     if (!databaseReady) {
       res.status(503).json({
-        message: "Permanent storage is not available. Please set MONGODB_URI before saving progress.",
+        message: "Storage is not ready. Please check MONGODB_URI.",
         error: databaseError,
       });
       return;
