@@ -221,7 +221,6 @@ export function ProblemDrawer({
                     }
                   >
                     <option value="unsolved">Unsolved</option>
-                    <option value="shaky">Shaky</option>
                     <option value="solved">Solved</option>
                     <option value="revisit">Revisit</option>
                     <option value="skipped">Skipped</option>

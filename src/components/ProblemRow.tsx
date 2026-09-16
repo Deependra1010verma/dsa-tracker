@@ -35,8 +35,7 @@ export const ProblemRow = memo(function ProblemRow({
   const hasNote = hasNoteContent(problem);
 
   function nextStatusCycle(current: Status): Status {
-    if (current === "unsolved") return "shaky";
-    if (current === "shaky") return "solved";
+    if (current === "unsolved") return "solved";
     if (current === "solved") return "unsolved";
     return "solved";
   }
@@ -51,7 +50,7 @@ export const ProblemRow = memo(function ProblemRow({
           <span className="row-index-num">{displayIndex}</span>
           <button
             type="button"
-            className={`status-checkbox${problem.status === "solved" ? " checked" : problem.status === "shaky" ? " shaky" : ""}`}
+            className={`status-checkbox${problem.status === "solved" ? " checked" : ""}`}
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
@@ -60,13 +59,13 @@ export const ProblemRow = memo(function ProblemRow({
             aria-label="Toggle status"
             title={
               problem.status === "unsolved"
-                ? "Mark shaky"
-                : problem.status === "shaky" || problem.status === "revisit" || problem.status === "skipped"
+                ? "Mark solved"
+                : problem.status === "revisit" || problem.status === "skipped"
                 ? "Mark solved"
                 : "Mark unsolved"
             }
           >
-            {problem.status === "solved" ? <span className="checkbox-inner-dot" /> : problem.status === "shaky" ? <span className="checkbox-shaky-dot">~</span> : null}
+            {problem.status === "solved" ? <span className="checkbox-inner-dot" /> : null}
           </button>
         </div>
       </td>

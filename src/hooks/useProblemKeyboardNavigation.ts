@@ -19,8 +19,7 @@ function isInputFocused() {
 }
 
 function cycleStatus(current: Status): Status {
-  if (current === "unsolved") return "shaky";
-  if (current === "shaky") return "solved";
+  if (current === "unsolved") return "solved";
   if (current === "solved") return "unsolved";
   return "solved";
 }

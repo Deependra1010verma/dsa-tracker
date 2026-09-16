@@ -33,7 +33,7 @@ const problemSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["unsolved", "shaky", "solved", "revisit", "skipped"],
+      enum: ["unsolved", "solved", "revisit", "skipped"],
       default: "unsolved",
     },
     shortNote: { type: String, default: "" },

@@ -6,7 +6,6 @@ export type DashboardStatsValue = {
   totalProblems: number;
   solvedProblems: number;
   revisitProblems: number;
-  shakyProblems: number;
   unsolvedProblems: number;
 };
 
@@ -54,13 +53,6 @@ export function DashboardStats({
           isActive={statusFilter === "revisit"}
         />
         <StatCard
-          label="Shaky"
-          value={visibleStats?.shakyProblems ?? 0}
-          hint={selectedTopic === "all" ? "Needs confidence" : "Topic shaky"}
-          onClick={() => setStatusFilter((prev) => (prev === "shaky" ? "all" : "shaky"))}
-          isActive={statusFilter === "shaky"}
-        />
-        <StatCard
           label="Unsolved"
           value={visibleStats?.unsolvedProblems ?? 0}
           hint={selectedTopic === "all" ? "Still pending" : "Topic pending"}
@@ -81,7 +73,6 @@ export function DashboardStats({
           <div className="progress-meta">
             <span>{stats?.solvedProblems ?? 0} solved</span>
             <span>{stats?.revisitProblems ?? 0} revisit</span>
-            <span>{stats?.shakyProblems ?? 0} shaky</span>
             <span>{stats?.unsolvedProblems ?? 0} unsolved</span>
           </div>
         </section>

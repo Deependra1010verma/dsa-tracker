@@ -1,7 +1,7 @@
 import type { PatternFamilyItem, Prerequisite } from "./api/types";
 
 export type Difficulty = "Easy" | "Medium" | "Hard";
-export type Status = "unsolved" | "solved" | "revisit" | "shaky" | "skipped";
+export type Status = "unsolved" | "solved" | "revisit" | "skipped";
 export type SortByOption = "optimal" | "status" | "difficulty" | "rating" | "title";
 
 export type Topic = {
@@ -63,7 +63,6 @@ export type Stats = {
   solvedProblems: number;
   revisitProblems: number;
   revisitStatusCount?: number;
-  shakyProblems: number;
   unsolvedProblems: number;
   skippedProblems: number;
 };

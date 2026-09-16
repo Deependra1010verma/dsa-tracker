@@ -6197,25 +6197,6 @@ a.problem-title-text {
   overflow: auto;
 }
 
-/* ── Shaky Status ──────────────────────────────────────── */
-.status-shaky {
-  color: #fbbf24;
-}
-
-/* Shaky checkbox — amber tint instead of green */
-.status-checkbox.shaky {
-  border-color: rgba(251, 191, 36, 0.5);
-  background: rgba(251, 191, 36, 0.12);
-}
-
-.checkbox-shaky-dot {
-  font-size: 1rem;
-  font-weight: 900;
-  color: #fbbf24;
-  line-height: 1;
-  user-select: none;
-}
-
 /* ── Solve Flash Animation ─────────────────────────────── */
 @keyframes row-solve-flash {
   0%   { background: rgba(34, 197, 94, 0.0);  box-shadow: none; }
@@ -6335,9 +6316,6 @@ a.problem-title-text {
   background: linear-gradient(90deg, #22c55e, #16a34a);
 }
 
-.platform-stat-bar.shaky {
-  background: linear-gradient(90deg, #fbbf24, #d97706);
-}
 
 .platform-diff-chips {
   display: flex;
@@ -6375,7 +6353,6 @@ a.problem-title-text {
 }
 
 .legend-dot.solved   { background: #22c55e; }
-.legend-dot.shaky    { background: #fbbf24; }
 .legend-dot.unsolved { background: rgba(255,255,255,0.15); }
 .legend-dot.easy     { background: #22c55e; }
 .legend-dot.medium   { background: #fbbf24; }

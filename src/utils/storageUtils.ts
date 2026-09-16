@@ -170,7 +170,7 @@ export function withStatusSchedule(problem: Problem, nextStatus: Status, nowDate
     nextProblem.revisitAt = nowDate.toISOString();
   }
 
-  if ((nextStatus === "solved" || nextStatus === "revisit" || nextStatus === "shaky") && previousStatus !== nextStatus) {
+  if ((nextStatus === "solved" || nextStatus === "revisit") && previousStatus !== nextStatus) {
     initializeRevisionSchedule(nextProblem, nowDate, intervals);
   } else if (nextStatus === "unsolved" || nextStatus === "skipped") {
     clearRevisionSchedule(nextProblem);

@@ -562,8 +562,8 @@ function startRevisionSchedule(problem: any, anchorOverride?: Date) {
   initializeRevisionSchedule(problem, anchorOverride);
 }
 
-function isRevisionActiveStatus(status: unknown): status is "solved" | "revisit" | "shaky" {
-  return status === "solved" || status === "revisit" || status === "shaky";
+function isRevisionActiveStatus(status: unknown): status is "solved" | "revisit" {
+  return status === "solved" || status === "revisit";
 }
 
 function syncRevisionScheduleForStatus(problem: any, previousStatus: unknown, now: Date) {
@@ -1247,7 +1247,7 @@ async function ensureSeedGeneralNotes() {
 
 
 function statusFromValue(value: unknown): ProblemStatus | "" {
-  return value === "solved" || value === "unsolved" || value === "revisit" || value === "shaky" || value === "skipped"
+  return value === "solved" || value === "unsolved" || value === "revisit" || value === "skipped"
     ? value
     : "";
 }

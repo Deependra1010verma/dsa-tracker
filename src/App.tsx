@@ -113,7 +113,6 @@ const statusLabels: Record<Status, string> = {
   unsolved: "Unsolved",
   solved: "Solved",
   revisit: "Revisit",
-  shaky: "Shaky",
   skipped: "Skipped",
 };
 
@@ -379,7 +378,6 @@ export default function App() {
     // revisitStatusCount = problems explicitly set to status "revisit".
     // Shown in sidebar "Revisit" button — separate concept from starred/revision.
     const revisitStatusCount = problems.filter((problem) => problem.status === "revisit").length;
-    const shakyProblems = problems.filter((problem) => problem.status === "shaky").length;
     const unsolvedProblems = problems.filter((problem) => problem.status === "unsolved").length;
     const skippedProblems = problems.filter((problem) => problem.status === "skipped").length;
 
@@ -388,7 +386,6 @@ export default function App() {
       solvedProblems,
       revisitProblems,
       revisitStatusCount,
-      shakyProblems,
       unsolvedProblems,
       skippedProblems,
     };
@@ -404,7 +401,6 @@ export default function App() {
       totalProblems: topicProblems.length,
       solvedProblems: topicProblems.filter((problem) => problem.status === "solved").length,
       revisitProblems: topicProblems.filter((problem) => problem.isPinned).length,
-      shakyProblems: topicProblems.filter((problem) => problem.status === "shaky").length,
       unsolvedProblems: topicProblems.filter((problem) => problem.status === "unsolved").length,
       skippedProblems: topicProblems.filter((problem) => problem.status === "skipped").length,
     };
@@ -968,7 +964,7 @@ export default function App() {
       const effectiveSortBy = statusFilter === "revisit" && sortByFilter === "status" ? "optimal" : sortByFilter;
 
       if (effectiveSortBy === "status") {
-        const statusMap: Record<Status, number> = { unsolved: 1, shaky: 2, revisit: 3, solved: 4, skipped: 5 };
+        const statusMap: Record<Status, number> = { unsolved: 1, revisit: 2, solved: 3, skipped: 4 };
         const statusDelta = statusMap[left.status] - statusMap[right.status];
         if (statusDelta !== 0) return statusDelta;
       } else if (effectiveSortBy === "difficulty") {

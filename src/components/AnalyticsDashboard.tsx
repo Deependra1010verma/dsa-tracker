@@ -29,7 +29,6 @@ type PlatformStat = {
   platform: string;
   total: number;
   solved: number;
-  shaky: number;
   easy: number;
   medium: number;
   hard: number;
@@ -42,12 +41,11 @@ function PlatformStatsChart({ problems }: { problems: Problem[] }) {
       const key = p.platformName || "Other";
       let entry = map.get(key);
       if (!entry) {
-        entry = { platform: key, total: 0, solved: 0, shaky: 0, easy: 0, medium: 0, hard: 0 };
+        entry = { platform: key, total: 0, solved: 0, easy: 0, medium: 0, hard: 0 };
         map.set(key, entry);
       }
       entry.total++;
       if (p.status === "solved") entry.solved++;
-      if (p.status === "shaky") entry.shaky++;
       if (p.difficulty === "Easy") entry.easy++;
       else if (p.difficulty === "Medium") entry.medium++;
       else if (p.difficulty === "Hard") entry.hard++;
@@ -64,20 +62,18 @@ function PlatformStatsChart({ problems }: { problems: Problem[] }) {
   return (
     <div className="platform-stats-chart">
       {stats.map((s) => {
-        const solvedPct = Math.round(((s.solved + s.shaky) / s.total) * 100);
+        const solvedPct = Math.round((s.solved / s.total) * 100);
         const solvedWidth = ((s.solved / s.total) * 100).toFixed(1);
-        const shakyWidth = ((s.shaky / s.total) * 100).toFixed(1);
         const barWidth = ((s.total / maxTotal) * 100).toFixed(1);
         return (
           <div key={s.platform} className="platform-stat-row">
             <div className="platform-stat-label">
               <span className="platform-stat-name">{s.platform}</span>
-              <span className="platform-stat-meta">{s.solved + s.shaky}/{s.total} · {solvedPct}%</span>
+              <span className="platform-stat-meta">{s.solved}/{s.total} · {solvedPct}%</span>
             </div>
             <div className="platform-stat-bar-shell" title={`${s.total} problems`}>
               <div className="platform-stat-bar-track" style={{ width: `${barWidth}%` }}>
                 <div className="platform-stat-bar solved" style={{ width: `${solvedWidth}%` }} />
-                <div className="platform-stat-bar shaky" style={{ width: `${shakyWidth}%` }} />
               </div>
             </div>
             <div className="platform-diff-chips">
@@ -90,7 +86,6 @@ function PlatformStatsChart({ problems }: { problems: Problem[] }) {
       })}
       <div className="platform-stat-legend">
         <span className="legend-dot solved" /> Solved
-        <span className="legend-dot shaky" /> Shaky
         <span className="legend-dot unsolved" /> Unsolved
       </div>
     </div>
