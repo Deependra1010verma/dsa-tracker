@@ -4,7 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import { existsSync } from "fs";
 import { connectDb } from "./db.js";
-import { Activity, Problem, Topic, topicSeeds, GeneralNoteModelExport } from "./models.js";
+import { Activity, Problem, Topic, topicSeeds, GeneralNoteModelExport, DeletedProblem } from "./models.js";
 import { problemSeeds } from "./seed.js";
 import { problemSeeds2, topicSeeds2 } from "./seed2.js";
 import { problemSeeds3, topicSeeds3 } from "./seed3.js";
@@ -288,6 +288,9 @@ let storageMode: "mongo" | "memory" = "mongo";
 let databaseReady = false;
 let databaseError = "";
 let databaseInitPromise: Promise<void> | null = null;
+// Cache of topic IDs keyed by problemSet — populated during initializeStorage.
+// Used by the activity route to avoid an extra DB round-trip on every request.
+const topicIdsBySet = new Map<string, string[]>();
 
 function getServerAuthCredentials() {
   const username = (process.env.USERNAME || process.env.LOGIN_USERNAME || "").trim();
@@ -397,9 +400,20 @@ async function initializeStorage() {
     storageMode = "mongo";
 
     await dropLegacyTopicIndexes();
-    await ensureSeedTopics();
-    await ensureSeedGeneralNotes();
+    // ensureSeedTopics and ensureSeedGeneralNotes are independent — run in parallel.
+    await Promise.all([ensureSeedTopics(), ensureSeedGeneralNotes()]);
+    // ensureSeedProblems depends on topics being present, so it runs after.
     await ensureSeedProblems();
+
+    // Populate the in-memory topicIdsBySet cache so the activity route
+    // doesn't need an extra DB round-trip on every request.
+    const allTopics = await Topic.find({}, { _id: 1, problemSet: 1 }).lean();
+    for (const t of allTopics) {
+      const set = String(t.problemSet || "set1");
+      const bucket = topicIdsBySet.get(set) ?? [];
+      bucket.push(String(t._id));
+      topicIdsBySet.set(set, bucket);
+    }
 
     const problemCount = await Problem.countDocuments();
     if (problemCount === 0) {
@@ -1204,14 +1218,21 @@ async function ensureSeedProblems() {
   ).lean();
 
   if (staleSeededProblems.length > 0) {
-    console.warn(
-      `[ensureSeedProblems] Deleting ${staleSeededProblems.length} stale seeded problem(s) no longer in seed file:`,
-      staleSeededProblems.map((p) => `"${p.title}" (${p.problemKey})`).join(", ")
-    );
-    await Problem.deleteMany({
-      isSeeded: true,
-      problemKey: { $nin: seededKeys },
-    });
+    if (process.env.ALLOW_SEED_DELETION === "true") {
+      console.warn(
+        `[ensureSeedProblems] ALLOW_SEED_DELETION=true — deleting ${staleSeededProblems.length} stale seeded problem(s) no longer in seed file:`,
+        staleSeededProblems.map((p) => `"${p.title}" (${p.problemKey})`).join(", ")
+      );
+      await Problem.deleteMany({
+        isSeeded: true,
+        problemKey: { $nin: seededKeys },
+      });
+    } else {
+      console.warn(
+        `[ensureSeedProblems] Found ${staleSeededProblems.length} seeded problem(s) no longer in seed file (NOT deleted — set ALLOW_SEED_DELETION=true to enable):`,
+        staleSeededProblems.map((p) => `"${p.title}" (${p.problemKey})`).join(", ")
+      );
+    }
   }
 }
 
@@ -1223,13 +1244,15 @@ let memoryGeneralNotes: GeneralNote[] = generalNoteSeeds.map((seed, idx) => ({
 }));
 
 async function ensureSeedGeneralNotes() {
-  for (const seed of generalNoteSeeds) {
-    await GeneralNoteModelExport.findOneAndUpdate(
-      { title: seed.title },
-      { $setOnInsert: seed },
-      { upsert: true, new: false }
-    );
-  }
+  if (generalNoteSeeds.length === 0) return;
+  const operations = generalNoteSeeds.map((seed) => ({
+    updateOne: {
+      filter: { title: seed.title },
+      update: { $setOnInsert: seed },
+      upsert: true,
+    },
+  }));
+  await GeneralNoteModelExport.bulkWrite(operations, { ordered: false });
 }
 
 
@@ -1240,23 +1263,29 @@ function statusFromValue(value: unknown): ProblemStatus | "" {
 }
 
 async function recordMongoActivity(problem: { _id: unknown; topic: unknown }, kind: ActivityKind, occurredAt: Date) {
-  const when = coerceDate(occurredAt);
-  const existing = await Activity.findOne({
-    problem: problem._id,
-    kind,
-    occurredAt: {
-      $gte: new Date(when.getTime() - 1000),
-      $lte: new Date(when.getTime() + 1000),
-    },
-  }).select("_id");
-
-  if (!existing) {
-    await Activity.create({
+  try {
+    const when = coerceDate(occurredAt);
+    const existing = await Activity.findOne({
       problem: problem._id,
-      topic: problem.topic,
       kind,
-      occurredAt: when,
-    });
+      occurredAt: {
+        $gte: new Date(when.getTime() - 1000),
+        $lte: new Date(when.getTime() + 1000),
+      },
+    }).select("_id");
+
+    if (!existing) {
+      await Activity.create({
+        problem: problem._id,
+        topic: problem.topic,
+        kind,
+        occurredAt: when,
+      });
+    }
+  } catch (err) {
+    // Activity recording is secondary to problem state. Log the failure for
+    // observability but never let it crash or roll back the primary request.
+    console.error("[recordMongoActivity] Failed to record activity — problem data is safe:", err);
   }
 }
 
@@ -1424,7 +1453,12 @@ app.get(
       .populate("topic", "name slug order targetCount description accent")
       .sort({ roadmapSectionOrder: 1, roadmapOrder: 1, isPinned: -1, priority: -1, updatedAt: -1 });
 
+
     if (brief) {
+      // Select only the fields the list view needs, PLUS the note content fields so
+      // hasUserProblemNotes() can correctly compute hasNotes server-side.
+      // The note content fields are deleted from the response before sending — they are
+      // fetched purely to compute the boolean flag and never reach the client.
       query.select(
         "problemKey isSeeded title topic platformName platformUrl roadmapSection roadmapSectionOrder roadmapOrder difficulty status shortNote longNote codeSnippet codeSnippetLang mistakeLog mistakeTrigger mistakeReason mistakeFix invariant compareBruteForce compareOptimized compareWhyBetter pattern rating revisionCount revisionStage solvedAt revisitAt lastRevisionAt nextRevisionAt revisionCompletedAt prerequisites tags priority isPinned updatedAt"
       );
@@ -1446,6 +1480,7 @@ app.get(
       };
 
       if (brief) {
+        // Strip heavy text fields — they were fetched only to compute hasNotes above.
         delete response.longNote;
         delete response.codeSnippet;
         delete response.codeSnippetLang;
@@ -1523,7 +1558,12 @@ app.get(
       filter.topic = topic;
     }
     if (problemSet) {
-      const topicIds = await Topic.find({ problemSet }).distinct("_id");
+      // Use the in-memory cache populated at startup — avoids an extra DB round-trip.
+      // Fall back to a live query only if the cache is empty (e.g. test/edge-case).
+      const cachedIds = topicIdsBySet.get(problemSet);
+      const topicIds = cachedIds && cachedIds.length > 0
+        ? cachedIds
+        : await Topic.find({ problemSet }).distinct("_id").then((ids) => ids.map(String));
       filter.topic = topic ? topic : { $in: topicIds };
     }
 
@@ -2111,12 +2151,25 @@ app.delete(
       return;
     }
 
-    const deleted = await Problem.findByIdAndDelete(req.params.id);
-    if (!deleted) {
+    const toDelete = await Problem.findById(req.params.id).populate("topic").lean();
+    if (!toDelete) {
       res.status(404).json({ message: "Problem not found" });
       return;
     }
 
+    // Archive full problem document before deletion — allows manual recovery.
+    // Non-blocking: if archiving fails, we log it but still proceed with deletion.
+    try {
+      await DeletedProblem.create({
+        originalId: String(req.params.id),
+        deletedAt: new Date(),
+        document: toDelete,
+      });
+    } catch (archiveErr) {
+      console.error("[DELETE /api/problems/:id] Failed to archive problem before deletion:", archiveErr);
+    }
+
+    await Problem.findByIdAndDelete(req.params.id);
     await Activity.deleteMany({ problem: req.params.id });
 
     res.json({ message: "Problem deleted" });
@@ -2225,7 +2278,24 @@ app.patch(
       return;
     }
 
-    const updated = await GeneralNoteModelExport.findByIdAndUpdate(id, { $set: body }, { new: true }).lean();
+    // Whitelist fields to prevent accidental overwrites from partial or malformed bodies.
+    // Only fields explicitly present in the request body are updated.
+    const ALLOWED_NOTE_FIELDS = [
+      "title", "category", "summary", "content", "keyTakeaways",
+      "mistakesToAvoid", "codeSnippets", "tags", "importance", "isPinned",
+    ] as const;
+    const safeUpdate: Record<string, unknown> = {};
+    for (const field of ALLOWED_NOTE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        safeUpdate[field] = body[field];
+      }
+    }
+    if (Object.keys(safeUpdate).length === 0) {
+      res.status(400).json({ message: "No valid fields to update" });
+      return;
+    }
+
+    const updated = await GeneralNoteModelExport.findByIdAndUpdate(id, { $set: safeUpdate }, { new: true }).lean();
     if (!updated) {
       res.status(404).json({ message: "Note not found" });
       return;

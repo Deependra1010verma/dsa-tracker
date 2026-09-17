@@ -1804,7 +1804,7 @@ export default function App() {
                 className={`revisit-tab-btn ${revisitSubTab === "heatmap" ? "active" : ""}`}
                 onClick={() => setRevisitSubTab("heatmap")}
               >
-                <span>📊 Activity & Heatmap</span>
+                <span>📊 Activity</span>
                 {activityInsights.currentStreak > 0 ? (
                   <span className="revisit-streak-badge">🔥 {activityInsights.currentStreak}d</span>
                 ) : null}
@@ -1814,7 +1814,7 @@ export default function App() {
                 className={`revisit-tab-btn ${revisitSubTab === "all" ? "active" : ""}`}
                 onClick={() => setRevisitSubTab("all")}
               >
-                <span>📚 All Revisit View</span>
+                <span>📈 Analytics</span>
               </button>
             </div>
             {/* Inline streak badge on Queue tab too */}
@@ -1874,7 +1874,7 @@ export default function App() {
           </div>
         ) : null}
 
-        {selectedTopic === "revision" && (revisitSubTab === "heatmap" || revisitSubTab === "all") ? (
+        {selectedTopic === "revision" && revisitSubTab === "heatmap" ? (
           <ActivityInsightsPanel
             insights={activityInsights}
             scopeLabel={selectedTopicData?.name ?? "All topics"}
@@ -1893,7 +1893,7 @@ export default function App() {
           />
         ) : null}
 
-        {selectedTopic === "revision" && revisitSubTab === "heatmap" ? (
+        {selectedTopic === "revision" && revisitSubTab === "all" ? (
           <AnalyticsDashboard
             problems={problems}
             activities={activities}
@@ -1902,7 +1902,7 @@ export default function App() {
         ) : null}
 
 
-        {selectedTopic === "revision" && (revisitSubTab === "queue" || revisitSubTab === "all") && showRevisionDashboard ? (
+        {selectedTopic === "revision" && revisitSubTab === "queue" && showRevisionDashboard ? (
           <RevisionDashboard
             presetName={activeSrsPreset.name}
             presetDesc={activeSrsPreset.desc}

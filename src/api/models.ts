@@ -73,6 +73,10 @@ const problemSchema = new mongoose.Schema(
 );
 
 problemSchema.index({ title: "text", shortNote: "text", longNote: "text", platformName: "text" });
+// Compound index for the most common list query: filter by set+topic, sort by roadmap order.
+problemSchema.index({ problemSet: 1, topic: 1, roadmapSectionOrder: 1, roadmapOrder: 1 });
+// Compound index for revision queue queries: filter by set+nextRevisionAt.
+problemSchema.index({ problemSet: 1, nextRevisionAt: 1 });
 
 const activitySchema = new mongoose.Schema(
   {
@@ -90,6 +94,8 @@ const activitySchema = new mongoose.Schema(
 );
 
 activitySchema.index({ problem: 1, kind: 1, occurredAt: 1 });
+// Compound index for activity list query: filter by topic, sort by date desc.
+activitySchema.index({ topic: 1, occurredAt: -1 });
 
 const generalNoteSchema = new mongoose.Schema(
   {
@@ -143,5 +149,23 @@ export const Problem = (mongoose.models.Problem as mongoose.Model<any>) || mongo
 export const Activity = (mongoose.models.Activity as mongoose.Model<any>) || mongoose.model("Activity", activitySchema);
 export const GeneralNoteModelExport = (mongoose.models.GeneralNote as mongoose.Model<any>) || mongoose.model("GeneralNote", generalNoteSchema);
 
+// ─── Deleted Problem Archive ─────────────────────────────────────────────────
+// A copy of every deleted problem is stored here before hard-deletion so data
+// can be recovered manually if needed. Schema is intentionally loose (Mixed)
+// to capture whatever shape the problem had at deletion time.
+const deletedProblemSchema = new mongoose.Schema(
+  {
+    originalId: { type: String, required: true, index: true },
+    deletedAt: { type: Date, required: true, default: () => new Date(), index: true },
+    document: { type: mongoose.Schema.Types.Mixed, required: true },
+  },
+  { timestamps: false }
+);
+
+export const DeletedProblem =
+  (mongoose.models.DeletedProblem as mongoose.Model<any>) ||
+  mongoose.model("DeletedProblem", deletedProblemSchema);
+
 export { topicSeeds };
+
 
