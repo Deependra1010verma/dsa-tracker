@@ -35,9 +35,12 @@ export async function connectDb(mongoUri: string) {
     mongoose.set("bufferCommands", true);
     mongooseCache.promise = mongoose
       .connect(mongoUri, {
-        serverSelectionTimeoutMS: 10000,
-        connectTimeoutMS: 10000,
-        socketTimeoutMS: 20000,
+        serverSelectionTimeoutMS: 30000,
+        connectTimeoutMS: 30000,
+        socketTimeoutMS: 45000,
+        // Heartbeat keeps the TCP connection alive so Atlas doesn't silently
+        // drop idle connections (free tier M0 idles out quickly).
+        heartbeatFrequencyMS: 10000,
         family: 4,
       })
       .then((m) => {

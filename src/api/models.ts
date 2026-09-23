@@ -55,6 +55,24 @@ const problemSchema = new mongoose.Schema(
         platformName: { type: String, default: "" },
         platformUrl: { type: String, default: "" },
         note: { type: String, default: "" },
+        // "prerequisite" | "warmup" | "stepping_stone" — must match MemoryProblem type.
+        // Previously missing from schema, causing Mongoose to silently drop it on save.
+        kind: {
+          type: String,
+          enum: ["prerequisite", "warmup", "stepping_stone"],
+          default: "prerequisite",
+        },
+      },
+    ],
+    patternFamily: [
+      {
+        // Pattern family problems related to this problem. Previously missing from
+        // the schema entirely — data was preserved in memory mode but silently
+        // dropped on every Mongoose save in Mongo mode.
+        title: { type: String, required: true },
+        platformName: { type: String, default: "" },
+        platformUrl: { type: String, default: "" },
+        note: { type: String, default: "" },
       },
     ],
     rating: { type: Number, default: 0 },

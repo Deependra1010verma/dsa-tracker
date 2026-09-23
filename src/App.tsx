@@ -456,7 +456,8 @@ export default function App() {
         const serverUpdatedAt = problem.updatedAt ? new Date(problem.updatedAt).getTime() : 0;
         const localUpdatedAt = saved.updatedAt ?? 0;
 
-        // If server version is newer or equal, remove stale local progress override
+        // If server version is newer or equal, remove stale local progress override.
+        // Safe to remove immediately — server is the ground truth here.
         if (serverUpdatedAt >= localUpdatedAt) {
           removeLocalProgressItem(problem.title);
           removeLocalProgressItem(problem._id);
@@ -476,10 +477,17 @@ export default function App() {
           patchedProblem.revisionStage !== problem.revisionStage;
 
         if (modified) {
+          // Only remove local override AFTER the server confirms — if the network
+          // is down, keep the local override so progress isn't silently lost.
           void api(`/api/problems/${problem._id}`, {
             method: "PATCH",
             body: JSON.stringify(getProblemProgressSnapshot(patchedProblem)),
-          }).catch(() => {});
+          }).then(() => {
+            removeLocalProgressItem(problem.title);
+            removeLocalProgressItem(problem._id);
+          }).catch(() => {
+            // Server unreachable — keep local override for next sync attempt.
+          });
           return patchedProblem;
         }
 
@@ -1351,6 +1359,9 @@ export default function App() {
           method: "POST",
           body: JSON.stringify(payload),
         });
+        // Server returned the real _id — replace the temp title-keyed entry with
+        // the _id-keyed one so getSavedProgressForProblem always uses the stable key.
+        removeLocalProgressItem(payload.title);
         saveLocalProgressItem(response.problem._id, { status: response.problem.status, isPinned: response.problem.isPinned });
         appendProblem(response.problem);
         setActiveProblem(response.problem);

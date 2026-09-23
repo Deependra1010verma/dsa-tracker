@@ -4,6 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import { existsSync } from "fs";
 import { connectDb } from "./db.js";
+import mongoose from "mongoose";
 import { Activity, Problem, Topic, topicSeeds, GeneralNoteModelExport, DeletedProblem } from "./models.js";
 import { problemSeeds } from "./seed.js";
 import { problemSeeds2, topicSeeds2 } from "./seed2.js";
@@ -440,7 +441,59 @@ async function initializeStorage() {
     databaseReady = true;
     databaseError = error instanceof Error ? error.message : String(error);
     console.warn("MongoDB connection failed; falling back to in-memory mode:", databaseError);
+  } finally {
+    // Always clear the promise after init completes (success or failure) so
+    // reconnectIfNeeded() can issue a fresh attempt if the connection drops later.
+    databaseInitPromise = null;
   }
+}
+
+// Re-runs a lightweight reconnect when the Mongoose connection drops after the
+// initial startup (e.g. Atlas idle timeout on free-tier M0 clusters).
+// Seed & backfill are skipped on reconnect — only the DB connection is restored.
+// A shared promise prevents multiple concurrent requests from each firing their
+// own reconnect attempt simultaneously.
+let reconnectPromise: Promise<void> | null = null;
+
+async function reconnectIfNeeded() {
+  const mongoUri = getMongoUri();
+  if (!mongoUri || storageMode !== "mongo") return;
+
+  // Share a single in-flight reconnect across concurrent requests.
+  if (reconnectPromise) {
+    return reconnectPromise;
+  }
+
+  reconnectPromise = (async () => {
+    try {
+      await connectDb(mongoUri);
+
+      // Refresh the topicIdsBySet cache so the activity route's filter
+      // continues to work correctly after a reconnect.
+      const allTopics = await Topic.find({}, { _id: 1, problemSet: 1 }).lean();
+      topicIdsBySet.clear();
+      for (const t of allTopics) {
+        const set = String(t.problemSet || "set1");
+        const bucket = topicIdsBySet.get(set) ?? [];
+        bucket.push(String(t._id));
+        topicIdsBySet.set(set, bucket);
+      }
+
+      databaseReady = true;
+      databaseError = "";
+      console.log("MongoDB reconnected successfully.");
+    } catch (error) {
+      // Keep databaseReady = false so the middleware returns 503 rather than
+      // letting individual DB operations fail with cryptic 500 errors.
+      databaseReady = false;
+      databaseError = error instanceof Error ? error.message : String(error);
+      console.warn("MongoDB reconnect attempt failed:", databaseError);
+    } finally {
+      reconnectPromise = null;
+    }
+  })();
+
+  return reconnectPromise;
 }
 
 databaseInitPromise = initializeStorage();
@@ -453,12 +506,30 @@ app.use(
       return;
     }
 
+    // Wait for first-time initialization to complete.
     if (databaseInitPromise) {
       await databaseInitPromise;
     }
 
     if (!databaseReady && storageMode === "memory") {
       databaseReady = true;
+    }
+
+    // If we were connected to Mongo but the connection was dropped (e.g. Atlas
+    // idle timeout), try to reconnect before returning 500/503 to the client.
+    // We check the live readyState rather than databaseReady to avoid a race
+    // where multiple simultaneous requests all flip databaseReady=false.
+    if (storageMode === "mongo") {
+      const readyState = mongoose.connection.readyState;
+      // 0 = disconnected, 3 = disconnecting
+      if (readyState === 0 || readyState === 3) {
+        if (databaseReady) {
+          // First request to detect the drop — log once.
+          console.warn("MongoDB connection lost — attempting reconnect...");
+          databaseReady = false;
+        }
+        await reconnectIfNeeded();
+      }
     }
 
     if (!databaseReady) {
@@ -1358,6 +1429,14 @@ app.get(
       Topic.find({ problemSet }).sort({ order: 1 }).lean(),
       Problem.aggregate([
         {
+          // Filter to only the requested problemSet before grouping.
+          // Previously missing, causing counts to include problems from ALL sets.
+          $match:
+            problemSet === "set1"
+              ? { $or: [{ problemSet: "set1" }, { problemSet: { $exists: false } }, { problemSet: null }] }
+              : { problemSet },
+        },
+        {
           $group: {
             _id: "$topic",
             totalProblems: { $sum: 1 },
@@ -1711,6 +1790,7 @@ app.post(
     const {
       title,
       topicId,
+      problemSet,
       roadmapSection = "",
       platformName,
       platformUrl,
@@ -1806,6 +1886,9 @@ app.post(
     const created = await Problem.create({
       title,
       topic: topicId,
+      // Explicit problemSet so user-added problems land in the correct set.
+      // Falls back to "set1" (schema default) if the client didn't send one.
+      problemSet: typeof problemSet === "string" && problemSet ? problemSet : "set1",
       roadmapSection,
       platformName,
       platformUrl,
@@ -1922,6 +2005,17 @@ app.patch(
     const next = req.body ?? {};
     const previousStatus = problem.status;
     const now = new Date();
+
+    // Validate topicId if provided — an invalid ObjectId would cause populate("topic")
+    // to return null, silently corrupting the topic reference and crashing the client.
+    if (next.topicId) {
+      const topicExists = await Topic.exists({ _id: next.topicId });
+      if (!topicExists) {
+        res.status(400).json({ message: "Topic not found" });
+        return;
+      }
+    }
+
     Object.assign(problem, {
       title: next.title ?? problem.title,
       topic: next.topicId ?? problem.topic,
@@ -2251,7 +2345,20 @@ app.post(
       return;
     }
 
-    const note = await GeneralNoteModelExport.create(body);
+    // Build document from whitelisted fields only — do NOT pass raw body to create()
+    // to prevent mass assignment (e.g. client setting arbitrary _id or timestamps).
+    const note = await GeneralNoteModelExport.create({
+      title: body.title,
+      category: body.category || "Algorithmic Patterns",
+      summary: body.summary || "",
+      content: body.content || "",
+      keyTakeaways: Array.isArray(body.keyTakeaways) ? body.keyTakeaways : [],
+      mistakesToAvoid: Array.isArray(body.mistakesToAvoid) ? body.mistakesToAvoid : [],
+      codeSnippets: Array.isArray(body.codeSnippets) ? body.codeSnippets : [],
+      tags: Array.isArray(body.tags) ? body.tags : [],
+      importance: body.importance || "Important",
+      isPinned: Boolean(body.isPinned),
+    });
     res.json({ note });
   })
 );
@@ -2262,15 +2369,33 @@ app.patch(
     const { id } = req.params;
     const body = req.body;
 
+    // Shared whitelist — both memory and Mongo mode use the same allowed fields
+    // to prevent accidental overwrites of _id, createdAt, or other internal fields.
+    const ALLOWED_NOTE_FIELDS = [
+      "title", "category", "summary", "content", "keyTakeaways",
+      "mistakesToAvoid", "codeSnippets", "tags", "importance", "isPinned",
+    ] as const;
+
     if (storageMode === "memory") {
       const idx = memoryGeneralNotes.findIndex((n) => n._id === id);
       if (idx === -1) {
         res.status(404).json({ message: "Note not found" });
         return;
       }
+      // Apply only whitelisted fields — same contract as Mongo mode.
+      const safeUpdate: Record<string, unknown> = {};
+      for (const field of ALLOWED_NOTE_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(body, field)) {
+          safeUpdate[field] = body[field];
+        }
+      }
+      if (Object.keys(safeUpdate).length === 0) {
+        res.status(400).json({ message: "No valid fields to update" });
+        return;
+      }
       const updated = {
         ...memoryGeneralNotes[idx],
-        ...body,
+        ...safeUpdate,
         updatedAt: new Date(),
       };
       memoryGeneralNotes[idx] = updated;
@@ -2280,10 +2405,6 @@ app.patch(
 
     // Whitelist fields to prevent accidental overwrites from partial or malformed bodies.
     // Only fields explicitly present in the request body are updated.
-    const ALLOWED_NOTE_FIELDS = [
-      "title", "category", "summary", "content", "keyTakeaways",
-      "mistakesToAvoid", "codeSnippets", "tags", "importance", "isPinned",
-    ] as const;
     const safeUpdate: Record<string, unknown> = {};
     for (const field of ALLOWED_NOTE_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(body, field)) {
@@ -2310,12 +2431,22 @@ app.delete(
     const { id } = req.params;
 
     if (storageMode === "memory") {
+      const before = memoryGeneralNotes.length;
       memoryGeneralNotes = memoryGeneralNotes.filter((n) => n._id !== id);
+      if (memoryGeneralNotes.length === before) {
+        // Note didn't exist — return 404 to match Mongo mode behaviour.
+        res.status(404).json({ message: "Note not found" });
+        return;
+      }
       res.json({ message: "Note deleted" });
       return;
     }
 
-    await GeneralNoteModelExport.findByIdAndDelete(id);
+    const deleted = await GeneralNoteModelExport.findByIdAndDelete(id);
+    if (!deleted) {
+      res.status(404).json({ message: "Note not found" });
+      return;
+    }
     res.json({ message: "Note deleted" });
   })
 );
