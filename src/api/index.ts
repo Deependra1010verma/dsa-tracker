@@ -437,10 +437,21 @@ async function initializeStorage() {
     databaseError = "";
     console.log("Database ready (mongo)");
   } catch (error) {
-    storageMode = "memory";
-    databaseReady = true;
     databaseError = error instanceof Error ? error.message : String(error);
-    console.warn("MongoDB connection failed; falling back to in-memory mode:", databaseError);
+    const isProduction = process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL) || Boolean(process.env.RAILWAY_ENVIRONMENT);
+    if (isProduction) {
+      // In production, DO NOT fall back to memory mode — every write would be
+      // silently lost on the next cold start. Return 503 instead so the problem
+      // is visible and can be fixed (check MONGODB_URI env var).
+      storageMode = "mongo";
+      databaseReady = false;
+      console.error("MongoDB connection failed in production — serving 503 until reconnected:", databaseError);
+    } else {
+      // In development, memory fallback is convenient for offline work.
+      storageMode = "memory";
+      databaseReady = true;
+      console.warn("MongoDB connection failed; falling back to in-memory mode:", databaseError);
+    }
   } finally {
     // Always clear the promise after init completes (success or failure) so
     // reconnectIfNeeded() can issue a fresh attempt if the connection drops later.
@@ -1235,6 +1246,81 @@ async function ensureSeedProblems() {
   }
 
   if (duplicateIdsToDelete.length > 0) {
+    // Before deleting losers, archive them and merge any unique user-written data
+    // (notes, revision progress, status) into the keeper so nothing is permanently lost.
+    const losers = await Problem.find({ _id: { $in: duplicateIdsToDelete } }).lean();
+
+    for (const loser of losers) {
+      // Archive the full loser document for manual recovery.
+      try {
+        await DeletedProblem.create({
+          originalId: String(loser._id),
+          deletedAt: new Date(),
+          document: loser,
+        });
+      } catch {
+        // Non-fatal — log silently, don't block the dedup.
+      }
+
+      // Merge loser's user-written fields into the keeper using conditional updates:
+      // only write a field to the keeper if the loser has content and the keeper doesn't.
+      const mergeUpdate: Record<string, unknown> = {};
+      const userNoteFields = [
+        "shortNote", "longNote", "codeSnippet", "mistakeLog",
+        "mistakeTrigger", "mistakeReason", "mistakeFix",
+        "invariant", "compareBruteForce", "compareOptimized", "compareWhyBetter",
+      ] as const;
+
+      for (const field of userNoteFields) {
+        const loserValue = (loser as Record<string, unknown>)[field];
+        if (typeof loserValue === "string" && loserValue.trim()) {
+          // $max on strings won't work as intended; use conditional update via pipeline
+          mergeUpdate[`_mergeCandidate_${field}`] = loserValue;
+        }
+      }
+
+      if (Object.keys(mergeUpdate).length > 0) {
+        // Use aggregation pipeline update to only fill in fields that are empty on keeper.
+        const fieldsToMerge = userNoteFields.filter(
+          (f) => mergeUpdate[`_mergeCandidate_${f}`]
+        );
+        const pipelineUpdate = fieldsToMerge.map((field) => ({
+          $set: {
+            [field]: {
+              $cond: [
+                { $gt: [{ $strLenCP: { $ifNull: [`$${field}`, ""] } }, 0] },
+                `$${field}`, // keeper already has content — keep it
+                mergeUpdate[`_mergeCandidate_${field}`], // keeper is empty — take loser's
+              ],
+            },
+          },
+        }));
+
+        if (pipelineUpdate.length > 0) {
+          // Find the keeper by looking up the problemKey from the loser
+          await Problem.findOneAndUpdate(
+            { problemKey: loser.problemKey, _id: { $nin: duplicateIdsToDelete } },
+            pipelineUpdate,
+          );
+        }
+      }
+
+      // Reassign the loser's activities to the keeper to preserve history.
+      // Look up the keeper directly — it's the problem with the same problemKey
+      // that is NOT in the delete list (already updated via dedupeWrites above).
+      const keeper = await Problem.findOne({
+        problemKey: loser.problemKey,
+        _id: { $nin: duplicateIdsToDelete },
+      }).select("_id").lean() as { _id: unknown } | null;
+
+      if (keeper) {
+        await Activity.updateMany(
+          { problem: loser._id },
+          { $set: { problem: keeper._id } }
+        );
+      }
+    }
+
     await Problem.deleteMany({ _id: { $in: duplicateIdsToDelete } });
   }
 
@@ -1336,23 +1422,31 @@ function statusFromValue(value: unknown): ProblemStatus | "" {
 async function recordMongoActivity(problem: { _id: unknown; topic: unknown }, kind: ActivityKind, occurredAt: Date) {
   try {
     const when = coerceDate(occurredAt);
-    const existing = await Activity.findOne({
-      problem: problem._id,
-      kind,
-      occurredAt: {
-        $gte: new Date(when.getTime() - 1000),
-        $lte: new Date(when.getTime() + 1000),
-      },
-    }).select("_id");
 
-    if (!existing) {
-      await Activity.create({
+    // Use a day-level window for deduplication (same as POST /api/activity route).
+    // Atomic upsert replaces the old find-then-create pattern which had a TOCTOU
+    // race: two concurrent calls could both find nothing and both insert a duplicate.
+    const dayStart = new Date(when);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(when);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    await Activity.updateOne(
+      {
         problem: problem._id,
-        topic: problem.topic,
         kind,
-        occurredAt: when,
-      });
-    }
+        occurredAt: { $gte: dayStart, $lte: dayEnd },
+      },
+      {
+        $setOnInsert: {
+          problem: problem._id,
+          topic: problem.topic,
+          kind,
+          occurredAt: when,
+        },
+      },
+      { upsert: true }
+    );
   } catch (err) {
     // Activity recording is secondary to problem state. Log the failure for
     // observability but never let it crash or roll back the primary request.
@@ -1678,6 +1772,13 @@ app.post(
     const dayEnd = new Date(occurredAt);
     dayEnd.setHours(23, 59, 59, 999);
 
+    // Validate ObjectId format before hitting Mongo — invalid IDs throw a
+    // CastError that surfaces as a 500 rather than a descriptive 400.
+    if (storageMode === "mongo" && (!mongoose.Types.ObjectId.isValid(problemId) || !mongoose.Types.ObjectId.isValid(topicId))) {
+      res.status(400).json({ message: "Invalid problemId or topicId format" });
+      return;
+    }
+
     if (storageMode === "memory") {
       const problem = memoryProblems.find((entry) => entry._id === problemId);
       if (!problem) {
@@ -1743,13 +1844,16 @@ app.post(
 
 app.get(
   "/api/stats",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const problemSet = normalizeSearch(req.query.set) || "set1";
+
     if (storageMode === "memory") {
-      const totalProblems = memoryProblems.length;
-      const solvedProblems = memoryProblems.filter((problem) => problem.status === "solved").length;
-      const revisitProblems = memoryProblems.filter((problem) => problem.status === "revisit").length;
-      const unsolvedProblems = memoryProblems.filter((problem) => problem.status === "unsolved").length;
-      const skippedProblems = memoryProblems.filter((problem) => problem.status === "skipped").length;
+      const setProblems = memoryProblems.filter((p) => p.topic.problemSet === problemSet);
+      const totalProblems = setProblems.length;
+      const solvedProblems = setProblems.filter((problem) => problem.status === "solved").length;
+      const revisitProblems = setProblems.filter((problem) => problem.status === "revisit").length;
+      const unsolvedProblems = setProblems.filter((problem) => problem.status === "unsolved").length;
+      const skippedProblems = setProblems.filter((problem) => problem.status === "skipped").length;
 
       res.json({
         stats: {
@@ -1763,13 +1867,20 @@ app.get(
       return;
     }
 
+    // Filter by problemSet — "set1" is the default and may have documents
+    // without a problemSet field (legacy), so include those too.
+    const setFilter =
+      problemSet === "set1"
+        ? { $or: [{ problemSet: "set1" }, { problemSet: { $exists: false } }, { problemSet: null }] }
+        : { problemSet };
+
     const [totalProblems, solvedProblems, revisitProblems, unsolvedProblems, skippedProblems] =
       await Promise.all([
-        Problem.countDocuments(),
-        Problem.countDocuments({ status: "solved" }),
-        Problem.countDocuments({ status: "revisit" }),
-        Problem.countDocuments({ status: "unsolved" }),
-        Problem.countDocuments({ status: "skipped" }),
+        Problem.countDocuments(setFilter),
+        Problem.countDocuments({ ...setFilter, status: "solved" }),
+        Problem.countDocuments({ ...setFilter, status: "revisit" }),
+        Problem.countDocuments({ ...setFilter, status: "unsolved" }),
+        Problem.countDocuments({ ...setFilter, status: "skipped" }),
       ]);
 
     res.json({
@@ -1980,15 +2091,24 @@ app.patch(
       });
 
       syncRevisionScheduleForStatus(problem, previousStatus, now);
-      applyRevisionProgressPatch(problem, next);
 
+      // Guard solvedAt/revisitAt BEFORE applyRevisionProgressPatch for the same
+      // reason as the Mongo branch — so a null in the patch body can't clear a
+      // timestamp that was just established by the status transition.
       if (problem.status === "solved" && previousStatus !== "solved") {
         problem.solvedAt = problem.solvedAt ?? now;
-        appendMemoryActivity(problem, "solved", now);
       }
       if (problem.status === "revisit" && previousStatus !== "revisit") {
         problem.revisitAt = problem.revisitAt ?? now;
-        appendMemoryActivity(problem, "revisit", now);
+      }
+
+      applyRevisionProgressPatch(problem, next);
+
+      if (problem.status === "solved" && previousStatus !== "solved") {
+        appendMemoryActivity(problem, "solved", problem.solvedAt ?? now);
+      }
+      if (problem.status === "revisit" && previousStatus !== "revisit") {
+        appendMemoryActivity(problem, "revisit", problem.revisitAt ?? now);
       }
 
       memoryProblems[problemIndex] = problem;
@@ -2045,18 +2165,31 @@ app.patch(
     });
 
     syncRevisionScheduleForStatus(problem, previousStatus, now);
-    applyRevisionProgressPatch(problem, next);
 
+    // Set solvedAt/revisitAt BEFORE applyRevisionProgressPatch so the guard
+    // below runs first. If a client sends { status: "solved", solvedAt: null }
+    // in the same request, applyRevisionProgressPatch would clear it — but the
+    // guard here correctly re-sets it to `now` since it runs first.
     if (problem.status === "solved" && previousStatus !== "solved") {
       problem.solvedAt = problem.solvedAt ?? now;
-      await recordMongoActivity(problem, "solved", now);
     }
     if (problem.status === "revisit" && previousStatus !== "revisit") {
       problem.revisitAt = problem.revisitAt ?? now;
-      await recordMongoActivity(problem, "revisit", now);
     }
 
+    applyRevisionProgressPatch(problem, next);
+
+    // Save BEFORE recording activity so an orphan activity is never written
+    // when problem.save() fails (e.g. validation error or Mongo write conflict).
     await problem.save();
+
+    if (problem.status === "solved" && previousStatus !== "solved") {
+      await recordMongoActivity(problem, "solved", problem.solvedAt ?? now);
+    }
+    if (problem.status === "revisit" && previousStatus !== "revisit") {
+      await recordMongoActivity(problem, "revisit", problem.revisitAt ?? now);
+    }
+
     const populated = await problem.populate("topic");
     res.json({ problem: populated });
   })

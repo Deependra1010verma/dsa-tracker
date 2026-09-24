@@ -33,11 +33,22 @@ export async function connectDb(mongoUri: string) {
 
   if (!mongooseCache.promise) {
     mongoose.set("bufferCommands", true);
+
+    // On Vercel serverless the function timeout is 10s (Hobby) or 60s (Pro).
+    // Using 30s timeouts on Hobby means Mongoose keeps waiting until Vercel
+    // kills the request with a silent 504. Use 8s on Vercel so the app can
+    // return a clean 503 before the executor terminates the function.
+    // On Railway (long-running process) we keep the generous 30s.
+    const isVercel = Boolean(process.env.VERCEL);
+    const serverSelectionTimeoutMS = isVercel ? 8000 : 30000;
+    const connectTimeoutMS = isVercel ? 8000 : 30000;
+    const socketTimeoutMS = isVercel ? 15000 : 45000;
+
     mongooseCache.promise = mongoose
       .connect(mongoUri, {
-        serverSelectionTimeoutMS: 30000,
-        connectTimeoutMS: 30000,
-        socketTimeoutMS: 45000,
+        serverSelectionTimeoutMS,
+        connectTimeoutMS,
+        socketTimeoutMS,
         // Heartbeat keeps the TCP connection alive so Atlas doesn't silently
         // drop idle connections (free tier M0 idles out quickly).
         heartbeatFrequencyMS: 10000,
