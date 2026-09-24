@@ -44,6 +44,13 @@ export async function connectDb(mongoUri: string) {
     const connectTimeoutMS = isVercel ? 8000 : 30000;
     const socketTimeoutMS = isVercel ? 15000 : 45000;
 
+    // On Vercel each serverless invocation gets its own process (and its own
+    // connection pool). Keeping the pool tiny (1–5) prevents hundreds of
+    // concurrent Lambda instances from exhausting the Atlas M0 connection
+    // limit (500 total). On Railway the server is long-running so a slightly
+    // larger pool is fine, but still keep it modest for a personal app.
+    const maxPoolSize = isVercel ? 1 : 5;
+
     mongooseCache.promise = mongoose
       .connect(mongoUri, {
         serverSelectionTimeoutMS,
@@ -51,8 +58,23 @@ export async function connectDb(mongoUri: string) {
         socketTimeoutMS,
         // Heartbeat keeps the TCP connection alive so Atlas doesn't silently
         // drop idle connections (free tier M0 idles out quickly).
-        heartbeatFrequencyMS: 10000,
+        // Use a longer interval on Vercel — serverless functions are short-lived
+        // so a fast heartbeat would just waste connections.
+        heartbeatFrequencyMS: isVercel ? 30000 : 10000,
         family: 4,
+        // --- Connection pool limits (KEY FIX for Atlas M0 connection alerts) ---
+        // maxPoolSize: limits how many sockets each server node can open.
+        // On Vercel (serverless) keep it at 1 — each function invocation is
+        // short-lived and only ever uses one connection at a time.
+        maxPoolSize,
+        // minPoolSize 0: idle connections are closed immediately rather than
+        // kept open, which is correct for serverless where the process exits.
+        minPoolSize: 0,
+        // "auto" lets the driver pick the right monitoring mode:
+        // stream  → for long-lived servers (Railway)
+        // poll    → for serverless / short-lived processes (Vercel)
+        // This avoids an extra monitoring socket being held open per invocation.
+        serverMonitoringMode: "auto",
       })
       .then((m) => {
         mongooseCache.conn = m;
